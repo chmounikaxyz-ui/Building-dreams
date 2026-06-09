@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Background circle -->
+  <rect width="32" height="32" rx="8" fill="#7c3aed"/>
+  <!-- Hard hat shape -->
+  <path d="M8 20h16v2.5a1 1 0 01-1 1H9a1 1 0 01-1-1V20z" fill="white"/>
+  <path d="M16 8C11.5 8 8 11.5 8 16v1h16v-1c0-4.5-3.5-8-8-8z" fill="white"/>
+  <rect x="14.5" y="5.5" width="3" height="3.5" rx="1" fill="white"/>
+</svg>
