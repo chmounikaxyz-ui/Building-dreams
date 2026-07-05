@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import {
   Briefcase, Plus, CheckCircle, Clock, MapPin, Phone, Calendar,
   Star, X, ChevronDown, ChevronUp, HardHat, MessageCircle,
-  UserCheck, Bell, ClipboardCheck, History
+  UserCheck, Bell, ClipboardCheck, History, Radio
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -203,6 +203,12 @@ export function WorkerJobsPage({ setActiveTab }: { setActiveTab?: (tab: string) 
           <p className="text-muted-foreground text-sm">
             {pendingRequests.length} new request{pendingRequests.length !== 1 ? "s" : ""} · {currentJobs.length + acceptedRequests.length} active
           </p>
+          {available && (
+            <div className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-900/30 px-2.5 py-1 rounded-full shadow-sm">
+              <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-500" />
+              <span>Live location tracking active</span>
+            </div>
+          )}
         </div>
 
         {/* Availability Toggle */}

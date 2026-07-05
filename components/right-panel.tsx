@@ -1,13 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Bell, Search, Star, MapPin, BadgeCheck, X, Check, BriefcaseBusiness, Clock, MessageCircle } from "lucide-react"
+import { haversineKm, formatDistance } from "@/lib/location"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { WorkerProfileModal } from "@/components/worker-profile-modal"
 import { useApp } from "@/context/app-context"
+import { useAuth } from "@/context/auth-context"
 
 let convIdCounter = 1000
 
@@ -28,13 +30,7 @@ const initialFollowing = [
   { id: 203, name: "Gauresh Singh", profession: "Engineer", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face", isOnline: false },
 ]
 
-const notifications = [
-  { id: 1, text: "Ramesh Kumar accepted your booking request", time: "2 min ago", read: false, avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face" },
-  { id: 2, text: "Priya Sharma liked your post", time: "15 min ago", read: false, avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face" },
-  { id: 3, text: "New message from Suresh Patel", time: "1 hr ago", read: false, avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=face" },
-  { id: 4, text: "Your project estimate is ready", time: "3 hr ago", read: true, avatar: null },
-  { id: 5, text: "Amit Verma is available near you", time: "5 hr ago", read: true, avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop&crop=face" },
-]
+
 
 const indianCities = [
   "Mumbai, Maharashtra", "Delhi, NCR", "Bangalore, Karnataka",
@@ -43,73 +39,272 @@ const indianCities = [
 ]
 
 export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => void }) {
-  const { setSelectedConversation, conversations, setConversations, followingIds, followingList, toggleFollow: contextToggleFollow } = useApp()
+  const { 
+    setSelectedConversation, 
+    conversations, 
+    setConversations, 
+    followingIds, 
+    followingList, 
+    toggleFollow: contextToggleFollow, 
+    userLocation, 
+    detectLocation: contextDetectLocation, 
+    setUserLocation,
+    hireRequests,
+    sellerOrders,
+    sellerPreOrders
+  } = useApp()
+  const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState("")
   const [showNotifications, setShowNotifications] = useState(false)
-  const [notifList, setNotifList] = useState(notifications)
   const [showLocationPicker, setShowLocationPicker] = useState(false)
-  const [location, setLocation] = useState("Mumbai, Maharashtra")
   const [locationSearch, setLocationSearch] = useState("")
   const [isDetecting, setIsDetecting] = useState(false)
-  const [selectedWorker, setSelectedWorker] = useState<typeof allProfessionals[0] | null>(null)
+  const [selectedWorker, setSelectedWorker] = useState<any | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [dbWorkers, setDbWorkers] = useState<any[]>([])
+  const notifRef = useRef<HTMLDivElement>(null)
+
+  const currentUserId = user?.id || ""
+  const currentUserName = user?.name || ""
+
+  // Local storage notifications read state
+  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return []
+    try {
+      return JSON.parse(localStorage.getItem(`read_notifications_${currentUserId}`) || "[]")
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    if (currentUserId) {
+      try {
+        const stored = localStorage.getItem(`read_notifications_${currentUserId}`)
+        setReadNotifIds(stored ? JSON.parse(stored) : [])
+      } catch {
+        setReadNotifIds([])
+      }
+    }
+  }, [currentUserId])
+
+  const saveReadNotifIds = (next: string[]) => {
+    setReadNotifIds(next)
+    if (currentUserId) {
+      try {
+        localStorage.setItem(`read_notifications_${currentUserId}`, JSON.stringify(next))
+      } catch {}
+    }
+  }
+
+  // Dismissed (cleared) notifications — hidden permanently until new ID
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return []
+    try {
+      return JSON.parse(localStorage.getItem(`dismissed_notifications_${currentUserId}`) || "[]")
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    if (currentUserId) {
+      try {
+        const stored = localStorage.getItem(`dismissed_notifications_${currentUserId}`)
+        setDismissedNotifIds(stored ? JSON.parse(stored) : [])
+      } catch {
+        setDismissedNotifIds([])
+      }
+    }
+  }, [currentUserId])
+
+  const saveDismissedNotifIds = (next: string[]) => {
+    setDismissedNotifIds(next)
+    if (currentUserId) {
+      try {
+        localStorage.setItem(`dismissed_notifications_${currentUserId}`, JSON.stringify(next))
+      } catch {}
+    }
+  }
+
+  // Derive notifications dynamically from real database updates
+  const messageNotifs = conversations
+    .filter(c => c.unread > 0)
+    .map(c => ({
+      id: `msg_${c.id}_${c.unread}`,
+      text: `New message from ${c.name}: "${c.lastMessage}"`,
+      time: c.timestamp || "Just now",
+      avatar: c.avatar
+    }))
+
+  const workerNotifs = hireRequests
+    .filter(r => r.workerName === currentUserName && r.status === "Pending")
+    .map(r => ({
+      id: `hire_pending_${r.id}`,
+      text: `${r.explorerName} requested to hire you for "${r.jobTitle}"`,
+      time: r.date || "Just now",
+      avatar: r.explorerAvatar
+    }))
+
+  const explorerNotifs = hireRequests
+    .filter(r => r.explorerName === currentUserName && (r.status === "Accepted" || r.status === "Rejected"))
+    .map(r => ({
+      id: `hire_status_${r.id}_${r.status}`,
+      text: `${r.workerName} ${r.status.toLowerCase()} your hire request`,
+      time: r.date || "Just now",
+      avatar: r.workerAvatar
+    }))
+
+  const sellerNotifs = [
+    ...sellerOrders.filter(o => o.status === "Pending").map(o => ({
+      id: `order_${o.id}`,
+      text: `New order from ${o.buyerName} for ${o.productName}`,
+      time: o.date || "Just now",
+      avatar: ""
+    })),
+    ...sellerPreOrders.filter(p => p.status === "Pending").map(p => ({
+      id: `preorder_${p.id}`,
+      text: `New pre-order from ${p.buyerName} for ${p.productName}`,
+      time: p.date || "Just now",
+      avatar: ""
+    }))
+  ]
+
+  // Add default mock items at the bottom if needed, but filter them with static string IDs
+  const mockNotifs = [
+    { id: "mock_1", text: "Ramesh Kumar accepted your booking request", time: "2 min ago", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face" },
+    { id: "mock_2", text: "Priya Sharma liked your post", time: "15 min ago", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face" },
+    { id: "mock_3", text: "New message from Suresh Patel", time: "1 hr ago", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=face" }
+  ]
+
+  const rawNotifs = [
+    ...messageNotifs,
+    ...workerNotifs,
+    ...explorerNotifs,
+    ...sellerNotifs,
+    ...mockNotifs
+  ].filter(n => !dismissedNotifIds.includes(n.id))
+
+  const notifList = rawNotifs.map(n => ({
+    ...n,
+    read: readNotifIds.includes(n.id)
+  }))
 
   const unreadCount = notifList.filter(n => !n.read).length
 
-  const toggleFollow = (pro: typeof allProfessionals[0]) => {
+  const clearAllNotifs = () => {
+    const allIds = rawNotifs.map(n => String(n.id))
+    saveDismissedNotifIds([...new Set([...dismissedNotifIds, ...allIds])])
+    // Also mark as read
+    saveReadNotifIds([...new Set([...readNotifIds, ...allIds])])
+    setShowNotifications(false)
+  }
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  useEffect(() => {
+    const fetchWorkers = async () => {
+      try {
+        const res = await fetch("/api/users")
+        if (res.ok) {
+          const data = await res.json()
+          const workers = data.filter((u: any) => u.role === "worker")
+          const parsed = workers.map((w: any) => {
+            let parsedBioText = w.bio || ""
+            let parsedExperience = ""
+            let parsedExpectedRates = ""
+            let parsedWorkerType = "normal"
+            let parsedCoverImage = ""
+            let parsedAvailable = true
+            let parsedReviewsCount = 0
+
+            if (w.bio) {
+              try {
+                if (w.bio.trim().startsWith("{") && w.bio.trim().endsWith("}")) {
+                  const p = JSON.parse(w.bio)
+                  parsedBioText = p.bio || ""
+                  parsedExperience = p.experience || ""
+                  parsedWorkerType = p.workerType || "normal"
+                  parsedCoverImage = p.coverImage || ""
+                  if (p.expectedRates?.trim()) parsedExpectedRates = p.expectedRates
+                  if (p.available !== undefined) parsedAvailable = p.available
+                  if (p.reviewsCount !== undefined) parsedReviewsCount = Number(p.reviewsCount)
+                }
+              } catch {}
+            }
+
+            return {
+              id: w.id,
+              name: w.name,
+              profession: w.profession || "Worker",
+              avatar: w.avatar || "",
+              coverImage: parsedCoverImage,
+              rating: w.rating || 0,
+              reviewsCount: parsedReviewsCount || (w.rating > 0 ? 1 : 0),
+              verified: w.verified || false,
+              location: w.location || "Mumbai, India",
+              lat: w.lat || 19.0760,
+              lon: w.lon || 72.8777,
+              experience: parsedExperience || "Experienced",
+              rate: parsedExpectedRates,
+              skills: w.profession ? [w.profession] : ["Masonry"],
+              available: parsedAvailable,
+              bio: parsedBioText || "No bio provided.",
+              upiId: w.upiId || "",
+              bankAccount: w.bankAccount || "",
+              bankIfsc: w.bankIfsc || "",
+              workerType: parsedWorkerType,
+            }
+          }).filter((p: any) => p.workerType !== "emergency")
+          setDbWorkers(parsed)
+        }
+      } catch (err) {
+        console.error("Failed to fetch professionals in RightPanel:", err)
+      }
+    }
+    fetchWorkers()
+  }, [])
+
+  const workersWithDistance = dbWorkers.map(pro => {
+    let distance = pro.location
+    let _km = Infinity
+    if (userLocation?.status === "success" && pro.lat && pro.lon) {
+      const km = haversineKm(userLocation.lat, userLocation.lon, pro.lat, pro.lon)
+      const distStr = formatDistance(km)
+      distance = distStr ? `${distStr} away` : ""
+      _km = km
+    }
+    return { ...pro, distance, _km }
+  })
+
+  const activeWorkers = dbWorkers.length > 0 ? workersWithDistance : allProfessionals.map(p => ({ ...p, _km: Infinity }))
+
+  const toggleFollow = (pro: any) => {
     contextToggleFollow(pro.id, pro.name, pro.profession, pro.avatar)
   }
 
-  const openProfile = (pro: typeof allProfessionals[0]) => {
+  const openProfile = (pro: any) => {
     setSelectedWorker(pro)
     setIsModalOpen(true)
   }
 
   const handleMessage = async () => {
     if (!selectedWorker) return
-
-    // Create or get conversation in DB
-    try {
-      const stored = localStorage.getItem("auth_user")
-      if (stored && selectedWorker.id) {
-        const currentUser = JSON.parse(stored)
-        if (currentUser.id) {
-          await fetch("/api/messages", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: currentUser.id, otherUserId: String(selectedWorker.id) })
-          })
-        }
-      }
-    } catch (err) {
-      console.error("Failed to create conversation in DB:", err)
-    }
-
-    // Find existing conversation or create new one
-    const existing = conversations.find(c => c.name === selectedWorker.name)
-    if (existing) {
-      setSelectedConversation(existing)
-    } else {
-      // Create a new conversation
-      const newConv = {
-        id: newConvId(),
-        name: selectedWorker.name,
-        profession: selectedWorker.profession,
-        avatar: selectedWorker.avatar,
-        lastMessage: "Start a conversation",
-        timestamp: "Just now",
-        unread: 0,
-        isOnline: true,
-        messages: [],
-      }
-      setConversations(prev => [newConv, ...prev])
-      setSelectedConversation(newConv)
-    }
     setIsModalOpen(false)
+    localStorage.setItem("active_chat_other_user_id", String(selectedWorker.id))
     setActiveTab?.("messages")
   }
 
-  const handleFollowingClick = (person: typeof initialFollowing[0]) => {
+  const handleFollowingClick = (person: { id: string | number; name: string; profession: string; avatar: string; isOnline: boolean }) => {
     const conv = conversations.find(c => c.name === person.name)
     if (conv) {
       setSelectedConversation(conv)
@@ -131,23 +326,85 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
     setActiveTab?.("messages")
   }
 
-  const markAllRead = () => setNotifList(prev => prev.map(n => ({ ...n, read: true })))
-  const markRead = (id: number) => setNotifList(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+  const markAllRead = () => {
+    const allIds = notifList.map(n => String(n.id))
+    saveReadNotifIds([...new Set([...readNotifIds, ...allIds])])
+  }
+  const markRead = (id: string | number) => {
+    const strId = String(id)
+    if (!readNotifIds.includes(strId)) {
+      saveReadNotifIds([...readNotifIds, strId])
+    }
+  }
 
-  const detectLocation = () => {
+  const detectLocation = async () => {
     setIsDetecting(true)
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => { setTimeout(() => { setLocation("Current Location"); setIsDetecting(false); setShowLocationPicker(false) }, 1000) },
-        () => { setIsDetecting(false); alert("Location access denied.") }
-      )
-    } else setIsDetecting(false)
+    setLocationError(null)
+    try {
+      await contextDetectLocation()
+      setShowLocationPicker(false)
+    } catch (err) {
+      setLocationError("Location access denied or failed.")
+    } finally {
+      setIsDetecting(false)
+    }
+  }
+
+  const handleCitySelect = async (city: string) => {
+    setShowLocationPicker(false)
+    setLocationSearch("")
+    setLocationError(null)
+    
+    const cityCoords: Record<string, { lat: number; lon: number }> = {
+      "Mumbai, Maharashtra": { lat: 19.0760, lon: 72.8777 },
+      "Delhi, NCR": { lat: 28.7041, lon: 77.1025 },
+      "Bangalore, Karnataka": { lat: 12.9716, lon: 77.5946 },
+      "Hyderabad, Telangana": { lat: 17.3850, lon: 78.4867 },
+      "Chennai, Tamil Nadu": { lat: 13.0827, lon: 80.2707 },
+      "Pune, Maharashtra": { lat: 18.5204, lon: 73.8567 },
+      "Ahmedabad, Gujarat": { lat: 23.0225, lon: 72.5714 },
+      "Kolkata, West Bengal": { lat: 22.5726, lon: 88.3639 },
+      "Jaipur, Rajasthan": { lat: 26.9124, lon: 75.7873 },
+      "Surat, Gujarat": { lat: 21.1702, lon: 72.8311 }
+    }
+    
+    const coords = cityCoords[city]
+    if (coords) {
+      setUserLocation({
+        lat: coords.lat,
+        lon: coords.lon,
+        city,
+        status: "success"
+      })
+    } else {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data[0]) {
+            setUserLocation({
+              lat: parseFloat(data[0].lat),
+              lon: parseFloat(data[0].lon),
+              city: data[0].display_name.split(",")[0] + ", " + (data[0].display_name.split(",")[1] || "").trim(),
+              status: "success"
+            })
+          } else {
+            setLocationError("Location coordinates not found.")
+          }
+        } else {
+          setLocationError("Error searching location coordinates.")
+        }
+      } catch (err) {
+        console.error(err)
+        setLocationError("Network connection error.")
+      }
+    }
   }
 
   const filteredCities = indianCities.filter(c => c.toLowerCase().includes(locationSearch.toLowerCase()))
   const filteredProfessionals = searchQuery.trim()
-    ? allProfessionals.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.profession.toLowerCase().includes(searchQuery.toLowerCase()))
-    : allProfessionals.slice(0, 3)
+    ? activeWorkers.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.profession.toLowerCase().includes(searchQuery.toLowerCase()))
+    : activeWorkers.slice(0, 3)
 
   const workerForModal = selectedWorker ? {
     id: selectedWorker.id,
@@ -179,39 +436,44 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
           <Input placeholder="Search professionals..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 bg-secondary border-0 rounded-xl" />
           {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-3.5 h-3.5 text-muted-foreground" /></button>}
         </div>
-        <Button variant="ghost" size="icon" className="relative" onClick={() => setShowNotifications(v => !v)}>
-          <Bell className={cn("w-5 h-5", showNotifications && "text-primary")} />
-          {unreadCount > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">{unreadCount}</span>}
-        </Button>
-      </div>
-
-      {/* Notifications Panel */}
-      {showNotifications && (
-        <div className="bg-card border border-border rounded-2xl shadow-lg overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <h3 className="font-semibold text-sm text-card-foreground">Notifications</h3>
-            <button onClick={markAllRead} className="text-xs text-primary hover:underline">Mark all read</button>
-          </div>
-          <div className="max-h-72 overflow-y-auto divide-y divide-border">
-            {notifList.map(n => (
-              <div key={n.id} onClick={() => markRead(n.id)} className={cn("flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-secondary/50 transition-colors", !n.read && "bg-primary/5")}>
-                {n.avatar ? <Avatar className="w-8 h-8 shrink-0"><AvatarImage src={n.avatar} /><AvatarFallback>N</AvatarFallback></Avatar> : <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><BriefcaseBusiness className="w-4 h-4 text-primary" /></div>}
-                <div className="flex-1 min-w-0">
-                  <p className={cn("text-xs leading-snug", !n.read ? "text-card-foreground font-medium" : "text-muted-foreground")}>{n.text}</p>
-                  <div className="flex items-center gap-1 mt-1"><Clock className="w-3 h-3 text-muted-foreground" /><span className="text-[10px] text-muted-foreground">{n.time}</span></div>
-                </div>
-                {!n.read && <span className="w-2 h-2 bg-primary rounded-full shrink-0 mt-1" />}
+        <div className="relative flex shrink-0" ref={notifRef}>
+          <button 
+            className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors relative" 
+            onClick={() => setShowNotifications(v => !v)}
+          >
+            <Bell className={cn("w-5 h-5", showNotifications && "text-primary")} />
+            {unreadCount > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">{unreadCount}</span>}
+          </button>
+          
+          {/* Notifications Panel */}
+          {showNotifications && (
+            <div className="absolute right-0 top-12 w-72 bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-30">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
+                <h3 className="font-semibold text-sm text-card-foreground">Notifications</h3>
+                <button onClick={markAllRead} className="text-xs text-primary hover:underline">Mark all read</button>
               </div>
-            ))}
-          </div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-border bg-card">
+                {notifList.map(n => (
+                  <div key={n.id} onClick={() => markRead(n.id)} className={cn("flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-secondary/50 transition-colors bg-card", !n.read && "bg-primary/5")}>
+                    {n.avatar ? <Avatar className="w-8 h-8 shrink-0"><AvatarImage src={n.avatar} /><AvatarFallback>N</AvatarFallback></Avatar> : <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><BriefcaseBusiness className="w-4 h-4 text-primary" /></div>}
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("text-xs leading-snug", !n.read ? "text-card-foreground font-medium" : "text-muted-foreground")}>{n.text}</p>
+                      <div className="flex items-center gap-1 mt-1"><Clock className="w-3 h-3 text-muted-foreground" /><span className="text-[10px] text-muted-foreground">{n.time}</span></div>
+                    </div>
+                    {!n.read && <span className="w-2 h-2 bg-primary rounded-full shrink-0 mt-1" />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Location */}
       <div className="bg-secondary rounded-xl p-3">
         <div className="flex items-center gap-2 text-sm">
           <MapPin className="w-4 h-4 text-primary shrink-0" />
-          <span className="font-medium text-secondary-foreground truncate flex-1">{location}</span>
+          <span className="font-medium text-secondary-foreground truncate flex-1">{userLocation?.city || "Mumbai, Maharashtra"}</span>
           <Button variant="link" size="sm" className="ml-auto text-primary p-0 h-auto shrink-0" onClick={() => setShowLocationPicker(v => !v)}>Change</Button>
         </div>
       </div>
@@ -220,17 +482,28 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
       {showLocationPicker && (
         <div className="bg-card border border-border rounded-2xl shadow-lg overflow-hidden -mt-4">
           <div className="p-3 border-b border-border">
-            <Input placeholder="Search city..." value={locationSearch} onChange={e => setLocationSearch(e.target.value)} className="h-8 text-sm bg-secondary border-0" autoFocus />
+            <Input placeholder="Search city..." value={locationSearch} onChange={e => {
+              setLocationSearch(e.target.value)
+              if (locationError) setLocationError(null)
+            }} className="h-8 text-sm bg-secondary border-0" autoFocus />
           </div>
+          {locationError && (
+            <div className="text-[10px] text-red-500 font-medium px-4 py-2 bg-red-50 dark:bg-red-950/20 border-b border-border">
+              ⚠️ {locationError}
+            </div>
+          )}
           <div className="max-h-48 overflow-y-auto">
-            <button onClick={detectLocation} disabled={isDetecting} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary transition-colors text-left border-b border-border">
+            <button onClick={() => {
+              detectLocation()
+              setLocationError(null)
+            }} disabled={isDetecting} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary transition-colors text-left border-b border-border">
               <MapPin className="w-4 h-4 text-primary shrink-0" />
               <span className="text-sm font-medium text-primary">{isDetecting ? "Detecting..." : "Use current location"}</span>
             </button>
             {filteredCities.map(city => (
-              <button key={city} onClick={() => { setLocation(city); setShowLocationPicker(false); setLocationSearch("") }} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-secondary transition-colors text-left">
+              <button key={city} onClick={() => handleCitySelect(city)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-secondary transition-colors text-left">
                 <span className="text-sm text-card-foreground">{city}</span>
-                {location === city && <Check className="w-4 h-4 text-primary" />}
+                {(userLocation?.city || "Mumbai, Maharashtra") === city && <Check className="w-4 h-4 text-primary" />}
               </button>
             ))}
           </div>
@@ -270,7 +543,11 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
                     <span>{pro.profession}</span><span>•</span>
                     <div className="flex items-center gap-0.5"><Star className="w-3 h-3 fill-primary text-primary" /><span>{pro.rating}</span></div>
                   </div>
-                  <span className="text-xs text-muted-foreground">{pro.location}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {pro.distance && pro.distance !== "0 m away" && pro.distance !== "0m away" && pro.distance !== "away"
+                      ? pro.distance
+                      : pro.location}
+                  </span>
                 </button>
                 <Button size="sm" variant={followingIds.includes(pro.id) ? "secondary" : "outline"} className="rounded-full h-8 text-xs shrink-0" onClick={() => toggleFollow(pro)}>
                   {followingIds.includes(pro.id) ? "Following" : "Follow"}

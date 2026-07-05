@@ -47,9 +47,50 @@ const roleMeta: Record<UserRole, { label: string; color: string }> = {
 }
 
 export function Sidebar({ activeTab, setActiveTab, userRole = "explorer" }: SidebarProps) {
-  const { conversations } = useApp()
+  const { conversations, cartItems, hireRequests, sellerOrders, sellerPreOrders } = useApp()
   const { user } = useAuth()
   const { t } = useLang()
+
+  // Dynamic badge counts
+  const currentUserName = user?.name || ""
+  
+  // 1. Materials Count (Explorer Cart)
+  const materialsCount = cartItems.reduce((acc, item) => acc + item.quantity, 0)
+
+  // 2. Explore Count (Explorer Active Jobs + Pending requests)
+  const explorerActiveJobsCount = (() => {
+    if (typeof window === "undefined") return 0
+    try {
+      const hired = JSON.parse(localStorage.getItem("hired_jobs") || "[]")
+      return hired.filter((j: any) => {
+        if (j.requestId) {
+          const req = hireRequests.find((r: any) => r.id === j.requestId)
+          if (req && req.location === "Emergency") return false
+        }
+        return j.status === "Active"
+      }).length
+    } catch {
+      return 0
+    }
+  })()
+
+  const explorerPendingReqsCount = hireRequests.filter((r: any) =>
+    r.explorerName === currentUserName && r.status === "Pending" && r.location !== "Emergency"
+  ).length
+
+  const exploreCount = explorerActiveJobsCount + explorerPendingReqsCount
+
+  // 3. Worker My Jobs Count (Pending requests directed to worker)
+  const workerPendingCount = hireRequests.filter((r: any) =>
+    r.workerName === currentUserName && r.status === "Pending"
+  ).length
+
+  // 4. Seller My Store Count (Pending orders + Pending pre-orders)
+  const sellerPendingCount = (() => {
+    const pendingOrders = sellerOrders.filter(o => o.status === "Pending").length
+    const pendingPreOrders = sellerPreOrders.filter(p => p.status === "Pending").length
+    return pendingOrders + pendingPreOrders
+  })()
   
   // Fetch real unread count from DB
   const [totalUnread, setTotalUnread] = React.useState(0)
@@ -122,33 +163,44 @@ export function Sidebar({ activeTab, setActiveTab, userRole = "explorer" }: Side
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200",
-              activeTab === item.id
-                ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                : (item as any).isEmergency
-                ? "text-red-400 hover:bg-red-500/10"
-                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            )}
-          >
-            <div className="relative">
-              <item.icon className={cn("w-5 h-5", (item as any).isEmergency && activeTab !== item.id && "text-red-400")} />
-              {item.id === "messages" && totalUnread > 0 && (
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-sidebar rounded-full" />
+        {navItems.map((item) => {
+          const count = (() => {
+            if (item.id === "messages") return totalUnread
+            if (item.id === "materials") return materialsCount
+            if (item.id === "explore") return exploreCount
+            if (item.id === "myjobs") return workerPendingCount
+            if (item.id === "mystore") return sellerPendingCount
+            return 0
+          })()
+
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200",
+                activeTab === item.id
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : (item as any).isEmergency
+                  ? "text-red-400 hover:bg-red-500/10"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
-            </div>
-            <span className="font-medium">{item.label}</span>
-            {item.id === "messages" && totalUnread > 0 && (
-              <span className="ml-auto bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold px-2 py-0.5 rounded-full">
-                {totalUnread}
-              </span>
-            )}
-          </button>
-        ))}
+            >
+              <div className="relative">
+                <item.icon className={cn("w-5 h-5", (item as any).isEmergency && activeTab !== item.id && "text-red-400")} />
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-sidebar rounded-full" />
+                )}
+              </div>
+              <span className="font-medium">{item.label}</span>
+              {count > 0 && (
+                <span className="ml-auto bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold px-2 py-0.5 rounded-full">
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </nav>
 
       {/* User info + bottom nav */}

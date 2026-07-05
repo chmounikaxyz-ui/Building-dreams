@@ -154,6 +154,7 @@ export interface HireRequest {
   message: string
   status: "Pending" | "Accepted" | "Rejected" | "Completed"
   hiddenFromExplorer?: boolean
+  rating?: number
 }
 
 interface AppContextType {
@@ -193,6 +194,7 @@ interface AppContextType {
   // User location
   userLocation: UserLocation | null
   detectLocation: () => Promise<void>
+  setUserLocation: React.Dispatch<React.SetStateAction<UserLocation | null>>
   // User story
   userStories: { image: string; caption: string }[]
   addUserStory: (story: { image: string; caption: string }) => void
@@ -1227,6 +1229,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUserAvatar,
       userLocation,
       detectLocation,
+      setUserLocation,
       sellerProducts,
       setSellerProducts,
       allSellerProducts,

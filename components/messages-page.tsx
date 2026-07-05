@@ -9,7 +9,133 @@ import { cn, optimizeImage } from "@/lib/utils"
 import { useApp } from "@/context/app-context"
 import { WorkerProfileModal } from "@/components/worker-profile-modal"
 
-type CallState = "idle" | "ringing" | "connected"
+type CallState = "idle" | "calling" | "incoming" | "connected"
+
+// Synthetic Audio Manager using Web Audio API to play dial and ring tones without requiring audio files
+class SyntheticAudio {
+  private ctx: AudioContext | null = null
+  private osc1: OscillatorNode | null = null
+  private osc2: OscillatorNode | null = null
+  private gain: GainNode | null = null
+  private interval: any = null
+
+  startRinging() {
+    this.stop()
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioContextClass) return
+      this.ctx = new AudioContextClass()
+      
+      const playTone = () => {
+        if (!this.ctx) return
+        try {
+          this.osc1 = this.ctx.createOscillator()
+          this.osc2 = this.ctx.createOscillator()
+          this.gain = this.ctx.createGain()
+          
+          this.osc1.frequency.value = 440
+          this.osc2.frequency.value = 480
+          
+          this.gain.gain.setValueAtTime(0, this.ctx.currentTime)
+          this.gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 0.1)
+          this.gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 1.8)
+          this.gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2.0)
+          
+          this.osc1.connect(this.gain)
+          this.osc2.connect(this.gain)
+          this.gain.connect(this.ctx.destination)
+          
+          this.osc1.start()
+          this.osc2.start()
+          
+          const o1 = this.osc1
+          const o2 = this.osc2
+          setTimeout(() => {
+            try {
+              o1.stop()
+              o2.stop()
+            } catch {}
+          }, 2000)
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      
+      playTone()
+      this.interval = setInterval(playTone, 3000)
+    } catch (err) {
+      console.error("Audio ringtone failed to start:", err)
+    }
+  }
+
+  startDialing() {
+    this.stop()
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioContextClass) return
+      this.ctx = new AudioContextClass()
+      
+      const playTone = () => {
+        if (!this.ctx) return
+        try {
+          this.osc1 = this.ctx.createOscillator()
+          this.osc2 = this.ctx.createOscillator()
+          this.gain = this.ctx.createGain()
+          
+          this.osc1.frequency.value = 350
+          this.osc2.frequency.value = 440
+          
+          this.gain.gain.setValueAtTime(0, this.ctx.currentTime)
+          this.gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.05)
+          this.gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.95)
+          this.gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.0)
+          
+          this.osc1.connect(this.gain)
+          this.osc2.connect(this.gain)
+          this.gain.connect(this.ctx.destination)
+          
+          this.osc1.start()
+          this.osc2.start()
+          
+          const o1 = this.osc1
+          const o2 = this.osc2
+          setTimeout(() => {
+            try {
+              o1.stop()
+              o2.stop()
+            } catch {}
+          }, 1000)
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      
+      playTone()
+      this.interval = setInterval(playTone, 2000)
+    } catch (err) {
+      console.error("Audio dial tone failed to start:", err)
+    }
+  }
+
+  stop() {
+    if (this.interval) {
+      clearInterval(this.interval)
+      this.interval = null
+    }
+    try {
+      this.osc1?.stop()
+      this.osc2?.stop()
+    } catch {}
+    this.osc1 = null
+    this.osc2 = null
+    this.gain = null
+    if (this.ctx) {
+      this.ctx.close()
+      this.ctx = null
+    }
+  }
+}
+
 
 const EMOJI_LIST = [
   "😀","😂","😍","🥰","😎","🤔","👍","👏","🙏","❤️",
@@ -76,6 +202,13 @@ export function MessagesPage() {
   const [showMenu, setShowMenu] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [callState, setCallState] = useState<CallState>("idle")
+  const [callId, setCallId] = useState<string | null>(null)
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
+  const localStreamRef = useRef<MediaStream | null>(null)
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
+  const iceQueueRef = useRef<any[]>([])
+  const syntheticAudioRef = useRef<SyntheticAudio | null>(null)
+
   const { posts } = useApp()
   const [selectedWorkerForModal, setSelectedWorkerForModal] = useState<any | null>(null)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
@@ -83,13 +216,13 @@ export function MessagesPage() {
   const [callDuration, setCallDuration] = useState(0)
   const [isMuted, setIsMuted] = useState(false)
   const [isSpeaker, setIsSpeaker] = useState(false)
-  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const ringTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const callTimerRef = useRef<any | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const emojiRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
 
   // Blocked users (persisted per current user)
   const [blockedUsers, setBlockedUsers] = useState<string[]>(() => {
@@ -112,6 +245,12 @@ export function MessagesPage() {
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingConversations, setLoadingConversations] = useState(true)
   const [pollingRef] = useState({ interval: null as ReturnType<typeof setInterval> | null })
+
+  // Keep a ref of callState to prevent stale closures in polling callbacks
+  const callStateRef = useRef<CallState>("idle")
+  useEffect(() => {
+    callStateRef.current = callState
+  }, [callState])
 
   // isBlocked must be after selectedDbConv
   const isBlocked = selectedDbConv ? blockedUsers.includes(selectedDbConv.otherUserId) : false
@@ -155,6 +294,37 @@ export function MessagesPage() {
           const otherUser = await userRes.json()
           const msgRes = await fetch(`/api/messages/${conv.id}`)
           const msgs: any[] = msgRes.ok ? await msgRes.json() : []
+
+          // Check for incoming call signaling message
+          const lastMsg = msgs[msgs.length - 1]
+          if (lastMsg && lastMsg.text.startsWith("__CALL_INITIATED__") && lastMsg.senderId !== currentUserId) {
+            const parts = lastMsg.text.split("||")
+            const msgCallId = parts[1]
+            const timestampStr = parts[2]
+            const initTime = timestampStr ? new Date(timestampStr).getTime() : new Date(lastMsg.createdAt).getTime()
+            const isRecent = Math.abs(Date.now() - initTime) < 120000 // 2 minutes window to tolerate clock drift
+            const isProcessed = localStorage.getItem(`call_processed_${msgCallId}`)
+
+            if (isRecent && !isProcessed && callStateRef.current === "idle") {
+              // Automatically select the conversation and start incoming call!
+              setCallId(msgCallId)
+              setCallState("incoming")
+              
+              const minimalConv: DbConversation = {
+                id: conv.id,
+                userId: conv.userId,
+                otherUserId: conv.otherUserId,
+                otherUserName: otherUser.name || "User",
+                otherUserAvatar: otherUser.avatar || "",
+                otherUserProfession: otherUser.profession || "User",
+                lastMessage: conv.lastMessage || null,
+                lastMessageTime: conv.lastMessageTime || null,
+                unreadCount: 0
+              }
+              setSelectedDbConv(minimalConv)
+              setShowChatList(false)
+            }
+          }
 
           // Check cleared timestamp
           const clearedTimeStr = localStorage.getItem(`cleared_${currentUserId}_${conv.id}`)
@@ -214,9 +384,55 @@ export function MessagesPage() {
 
   useEffect(() => {
     loadConversations()
-    const interval = setInterval(loadConversations, 5000) // Reduced polling frequency
+    const interval = setInterval(loadConversations, 2000) // Increased polling frequency
     pollingRef.interval = interval
     return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId])
+
+  useEffect(() => {
+    const checkActiveChat = async () => {
+      const activeChatUserId = localStorage.getItem("active_chat_other_user_id")
+      if (activeChatUserId && currentUserId) {
+        localStorage.removeItem("active_chat_other_user_id")
+        try {
+          const res = await fetch("/api/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: currentUserId, otherUserId: activeChatUserId })
+          })
+          if (res.ok) {
+            const convData = await res.json()
+            if (convData && convData.id) {
+              localStorage.removeItem(`deleted_${currentUserId}_${convData.id}`)
+              localStorage.removeItem(`cleared_${currentUserId}_${convData.id}`)
+              
+              const userRes = await fetch(`/api/users/${activeChatUserId}`)
+              const otherUser = userRes.ok ? await userRes.json() : {}
+              
+              const enrichedConv: DbConversation = {
+                id: convData.id,
+                userId: currentUserId,
+                otherUserId: activeChatUserId,
+                otherUserName: otherUser.name || "User",
+                otherUserAvatar: otherUser.avatar || "",
+                otherUserProfession: otherUser.profession || "User",
+                lastMessage: convData.lastMessage || null,
+                lastMessageTime: convData.lastMessageTime || null,
+                unreadCount: 0
+              }
+              
+              setSelectedDbConv(enrichedConv)
+              setShowChatList(false)
+              loadMessages(convData.id)
+            }
+          }
+        } catch (err) {
+          console.error("Error setting active chat on mount:", err)
+        }
+      }
+    }
+    checkActiveChat()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId])
 
@@ -274,15 +490,360 @@ export function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [dbMessages])
 
+  // Keep callId ref to prevent stale closures in WebRTC callbacks
+  const callIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    callIdRef.current = callId
+  }, [callId])
+
   // Poll messages for selected conversation
   useEffect(() => {
     if (!selectedDbConv) return
-    const interval = setInterval(() => loadMessages(selectedDbConv.id), 3000)
+    const pollInterval = callState !== "idle" ? 1000 : 3000
+    const interval = setInterval(() => loadMessages(selectedDbConv.id), pollInterval)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDbConv?.id])
+  }, [selectedDbConv?.id, callState])
 
-  // ── Send message ──────────────────────────────────────────────────────────
+  // Initialize synthetic ringtones on mount
+  useEffect(() => {
+    syntheticAudioRef.current = new SyntheticAudio()
+    return () => {
+      syntheticAudioRef.current?.stop()
+    }
+  }, [])
+
+  // Handle ringtone and dial tone audio based on call state
+  useEffect(() => {
+    if (callState === "calling") {
+      syntheticAudioRef.current?.startDialing()
+    } else if (callState === "incoming") {
+      syntheticAudioRef.current?.startRinging()
+    } else {
+      syntheticAudioRef.current?.stop()
+    }
+  }, [callState])
+
+  // Handle active call duration timer
+  useEffect(() => {
+    if (callState === "connected") {
+      callTimerRef.current = window.setInterval(() => setCallDuration(d => d + 1), 1000)
+    } else {
+      if (callTimerRef.current) window.clearInterval(callTimerRef.current)
+    }
+    return () => { if (callTimerRef.current) window.clearInterval(callTimerRef.current) }
+  }, [callState])
+
+  // Handle microphone mute state
+  useEffect(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = !isMuted
+      })
+    }
+  }, [isMuted])
+
+  // ── WebRTC Implementation ──────────────────────────────────────────────────
+
+  const initializePeerConnection = async () => {
+    if (peerConnectionRef.current) return
+
+    let localStream: MediaStream
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      localStreamRef.current = localStream
+    } catch (err) {
+      console.error("Failed to get local stream:", err)
+      alert("Microphone permission is required for voice calls.")
+      throw err
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" }
+      ]
+    })
+
+    localStream.getAudioTracks().forEach(track => {
+      pc.addTrack(track, localStream)
+    })
+
+    pc.onicecandidate = (event) => {
+      const activeId = callIdRef.current
+      if (event.candidate && activeId) {
+        sendSignalingMessage(`__RTC_ICE__||${activeId}||${JSON.stringify(event.candidate)}`)
+      }
+    }
+
+    pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = event.streams[0]
+          remoteAudioRef.current.play().catch(e => console.error("Failed to play remote stream:", e))
+        }
+      }
+    }
+
+    peerConnectionRef.current = pc
+  }
+
+  const sendSignalingMessage = async (text: string) => {
+    if (!selectedDbConv || !currentUserId) return
+    try {
+      await fetch(`/api/messages/${selectedDbConv.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderId: currentUserId, text })
+      })
+    } catch (err) {
+      console.error("Failed to send signaling message:", err)
+    }
+  }
+
+  const startCall = async () => {
+    if (!selectedDbConv || !currentUserId) return
+    
+    const newCallId = `call_${Date.now()}_${Math.random().toString(36).substring(5)}`
+    setCallId(newCallId)
+    setCallState("calling")
+    setCallDuration(0)
+    
+    try {
+      await sendSignalingMessage(`__CALL_INITIATED__||${newCallId}||${new Date().toISOString()}`)
+    } catch (err) {
+      console.error("Failed to initiate call:", err)
+      setCallState("idle")
+    }
+  }
+
+  const acceptCall = async () => {
+    const activeId = callIdRef.current
+    if (!activeId || !selectedDbConv) return
+    try {
+      await initializePeerConnection()
+      const pc = peerConnectionRef.current
+      if (pc) {
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        await sendSignalingMessage(`__RTC_OFFER__||${activeId}||${offer.sdp}`)
+        setCallState("connected")
+        setCallDuration(0)
+      }
+    } catch (err) {
+      console.error("Failed to accept call:", err)
+      cleanupAndRejectCall("Accept failed")
+    }
+  }
+
+  const declineCall = async () => {
+    const activeId = callIdRef.current
+    if (activeId && selectedDbConv) {
+      sendSignalingMessage(`__CALL_REJECTED__||${activeId}`)
+      localStorage.setItem(`call_processed_${activeId}`, "declined")
+
+      fetch(`/api/messages/${selectedDbConv.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderId: currentUserId, text: "📞 Missed voice call" })
+      }).catch(err => console.error(err))
+    }
+
+    cleanupCall()
+  }
+
+  const cancelCall = async () => {
+    const activeId = callIdRef.current
+    if (activeId && selectedDbConv) {
+      sendSignalingMessage(`__CALL_ENDED__||${activeId}`)
+      localStorage.setItem(`call_processed_${activeId}`, "cancelled")
+
+      fetch(`/api/messages/${selectedDbConv.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderId: currentUserId, text: "📞 Missed voice call" })
+      }).catch(err => console.error(err))
+    }
+
+    cleanupCall()
+  }
+
+  const endCall = async () => {
+    const activeId = callIdRef.current
+    if (activeId && selectedDbConv) {
+      sendSignalingMessage(`__CALL_ENDED__||${activeId}`)
+      localStorage.setItem(`call_processed_${activeId}`, "ended")
+
+      const durLabel = formatDuration(callDuration)
+      fetch(`/api/messages/${selectedDbConv.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderId: currentUserId, text: `📞 Voice call (${durLabel})` })
+      }).catch(err => console.error(err))
+    }
+
+    cleanupCall()
+  }
+
+  const cleanupCall = () => {
+    setCallState("idle")
+    setCallId(null)
+    setCallDuration(0)
+    setIsMuted(false)
+    setIsSpeaker(false)
+    
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop())
+      localStreamRef.current = null
+    }
+    
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close()
+      peerConnectionRef.current = null
+    }
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null
+    }
+
+    syntheticAudioRef.current?.stop()
+    iceQueueRef.current = []
+
+    if (selectedDbConv) {
+      loadMessages(selectedDbConv.id)
+    }
+    loadConversations()
+  }
+
+  const cleanupAndRejectCall = (reason: string) => {
+    const activeId = callIdRef.current
+    if (activeId && selectedDbConv) {
+      sendSignalingMessage(`__CALL_REJECTED__||${activeId}`)
+      localStorage.setItem(`call_processed_${activeId}`, "failed")
+    }
+    cleanupCall()
+  }
+
+  // ── WebRTC Signaling Receiver ──────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!selectedDbConv || !currentUserId) return
+
+    const handleSignaling = async () => {
+      const activeId = callIdRef.current
+      for (const msg of dbMessages) {
+        const text = msg.text
+        if (!text.startsWith("__CALL_") && !text.startsWith("__RTC_")) continue
+
+        const parts = text.split("||")
+        const type = parts[0]
+        const msgCallId = parts[1]
+
+        // Detect incoming call initiation in active conversation messages
+        if (type === "__CALL_INITIATED__" && msg.senderId !== currentUserId) {
+          const timestampStr = parts[2]
+          const initTime = timestampStr ? new Date(timestampStr).getTime() : new Date(msg.createdAt).getTime()
+          const isRecent = Math.abs(Date.now() - initTime) < 120000 // 2 minutes window to tolerate clock drift
+          const isProcessed = localStorage.getItem(`call_processed_${msgCallId}`)
+
+          if (isRecent && !isProcessed && callStateRef.current === "idle") {
+            setCallId(msgCallId)
+            setCallState("incoming")
+            continue
+          }
+        }
+
+        if (activeId && msgCallId === activeId && msg.senderId !== currentUserId) {
+          // A. Offer received
+          if (type === "__RTC_OFFER__" && callState === "calling") {
+            const sdp = parts[2]
+            try {
+              await initializePeerConnection()
+              const pc = peerConnectionRef.current
+              if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp }))
+                const answer = await pc.createAnswer()
+                await pc.setLocalDescription(answer)
+                
+                await sendSignalingMessage(`__RTC_ANSWER__||${activeId}||${answer.sdp}`)
+                setCallState("connected")
+                
+                // Drain candidates
+                while (iceQueueRef.current.length > 0) {
+                  const cand = iceQueueRef.current.shift()
+                  if (cand) {
+                    await pc.addIceCandidate(new RTCIceCandidate(cand))
+                  }
+                }
+              }
+            } catch (err) {
+              console.error("Error setting offer:", err)
+              cleanupAndRejectCall("Offer setup failed")
+            }
+          }
+
+          // B. Answer received
+          if (type === "__RTC_ANSWER__" && callState === "connected") {
+            const sdp = parts[2]
+            try {
+              const pc = peerConnectionRef.current
+              if (pc && !pc.remoteDescription) {
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp }))
+                
+                // Drain candidates
+                while (iceQueueRef.current.length > 0) {
+                  const cand = iceQueueRef.current.shift()
+                  if (cand) {
+                    await pc.addIceCandidate(new RTCIceCandidate(cand))
+                  }
+                }
+              }
+            } catch (err) {
+              console.error("Error setting answer:", err)
+            }
+          }
+
+          // C. ICE Candidate received
+          if (type === "__RTC_ICE__") {
+            try {
+              const candidate = JSON.parse(parts[2])
+              const pc = peerConnectionRef.current
+              if (pc && pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate))
+              } else {
+                iceQueueRef.current.push(candidate)
+              }
+            } catch (err) {
+              console.error("Error handling ICE candidate:", err)
+            }
+          }
+
+          // D. Call ended or rejected
+          if (type === "__CALL_REJECTED__") {
+            localStorage.setItem(`call_processed_${activeId}`, "rejected")
+            cleanupCall()
+          }
+
+          if (type === "__CALL_ENDED__") {
+            localStorage.setItem(`call_processed_${activeId}`, "ended")
+            cleanupCall()
+          }
+        }
+      }
+    }
+
+    handleSignaling()
+  }, [dbMessages, callState, selectedDbConv?.id, currentUserId])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
+      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setShowEmojiPicker(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
 
   const handleSendDbMessage = async () => {
     if (!messageInput.trim() || !selectedDbConv) return
@@ -301,38 +862,6 @@ export function MessagesPage() {
     } catch (err) {
       console.error("Send message error:", err)
     }
-  }
-
-  // ── UI helpers ────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
-      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setShowEmojiPicker(false)
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [])
-
-  useEffect(() => {
-    if (callState === "ringing") {
-      ringTimerRef.current = setTimeout(() => { setCallState("connected"); setCallDuration(0) }, 3000)
-    }
-    return () => { if (ringTimerRef.current) clearTimeout(ringTimerRef.current) }
-  }, [callState])
-
-  useEffect(() => {
-    if (callState === "connected") {
-      callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000)
-    } else {
-      if (callTimerRef.current) clearInterval(callTimerRef.current)
-    }
-    return () => { if (callTimerRef.current) clearInterval(callTimerRef.current) }
-  }, [callState])
-
-  const endCall = () => {
-    setCallState("idle"); setCallDuration(0); setIsMuted(false); setIsSpeaker(false)
-    if (ringTimerRef.current) clearTimeout(ringTimerRef.current)
   }
 
   const formatDuration = (s: number) =>
@@ -627,11 +1156,12 @@ export function MessagesPage() {
 
   // Synchronous render-time cleared-messages filter — never lets stale polling show hidden messages
   const visibleMessages = (() => {
-    if (!selectedDbConv) return dbMessages
+    const filtered = dbMessages.filter(m => !m.text.startsWith("__CALL_") && !m.text.startsWith("__RTC_"))
+    if (!selectedDbConv) return filtered
     const clearedTimeStr = localStorage.getItem(`cleared_${currentUserId}_${selectedDbConv.id}`)
-    if (!clearedTimeStr) return dbMessages
+    if (!clearedTimeStr) return filtered
     const clearedTime = new Date(clearedTimeStr)
-    return dbMessages.filter(m => new Date(m.createdAt) > clearedTime)
+    return filtered.filter(m => new Date(m.createdAt) > clearedTime)
   })()
 
   const formatTime = (iso: string) => {
@@ -645,6 +1175,7 @@ export function MessagesPage() {
       {/* Hidden inputs */}
       <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSend} />
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSend} />
+      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
 
       {/* Chat List */}
       <div className={cn(
@@ -713,7 +1244,17 @@ export function MessagesPage() {
                 </div>
                 <p className="text-xs text-muted-foreground truncate">{conv.otherUserProfession}</p>
                  <p className={cn("text-sm truncate", conv.unreadCount > 0 ? "font-semibold text-foreground" : "text-muted-foreground")}>
-                  {conv.lastMessage?.startsWith("__IMG__") ? "📷 Photo" : conv.lastMessage?.startsWith("__POST__") ? "📸 Shared a post" : conv.lastMessage?.startsWith("__FILE__") ? "📄 " + (conv.lastMessage.replace("__FILE__", "").split("||")[0] || "File") : conv.lastMessage ?? ""}
+                  {conv.lastMessage?.startsWith("__IMG__")
+                    ? "📷 Photo"
+                    : conv.lastMessage?.startsWith("__POST__")
+                    ? "📸 Shared a post"
+                    : conv.lastMessage?.startsWith("__FILE__")
+                    ? "📄 " + (conv.lastMessage.replace("__FILE__", "").split("||")[0] || "File")
+                    : conv.lastMessage?.startsWith("__CALL_INITIATED__")
+                    ? "📞 Voice Call"
+                    : conv.lastMessage?.startsWith("__RTC_") || conv.lastMessage?.startsWith("__CALL_")
+                    ? "📞 Voice Call"
+                    : conv.lastMessage ?? ""}
                 </p>
               </div>
               {conv.unreadCount > 0 && <span className="w-5 h-5 bg-primary text-primary-foreground text-xs font-bold rounded-full flex items-center justify-center shrink-0">{conv.unreadCount}</span>}
@@ -749,7 +1290,13 @@ export function MessagesPage() {
               </button>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={() => setCallState("ringing")}><Phone className="w-5 h-5" /></Button>
+              <button 
+                onClick={startCall}
+                className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                title="Call"
+              >
+                <Phone className="w-5 h-5" />
+              </button>
               <div className="relative" ref={menuRef}>
                 <Button variant="ghost" size="icon" onClick={() => setShowMenu(v => !v)}><MoreVertical className="w-5 h-5" /></Button>
                 {showMenu && (
@@ -956,59 +1503,92 @@ export function MessagesPage() {
 
       {/* Call Screen */}
       {callState !== "idle" && selectedDbConv && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)" }}>
-          {callState === "ringing" && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center animate-fade-in"
+          style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)" }}>
+          
+          {(callState === "calling" || callState === "incoming") && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               {[1, 2, 3].map(i => (
-                <div key={i} className="absolute rounded-full border border-white/10 animate-ping"
-                  style={{ width: `${i * 120 + 80}px`, height: `${i * 120 + 80}px`, animationDelay: `${i * 0.4}s`, animationDuration: "2s" }} />
+                <div key={i} className="absolute rounded-full border border-primary/20 animate-ping"
+                  style={{ width: `${i * 120 + 80}px`, height: `${i * 120 + 80}px`, animationDelay: `${i * 0.4}s`, animationDuration: "2.5s" }} />
               ))}
             </div>
           )}
-          <div className="flex flex-col items-center gap-8 px-8 w-full max-w-sm">
-            <div className={cn("w-32 h-32 rounded-full p-1", callState === "connected" ? "bg-gradient-to-tr from-green-400 to-emerald-500" : "bg-gradient-to-tr from-primary to-violet-400")}>
-              <Avatar className="w-full h-full border-4 border-[#1a1a2e]">
-                {selectedDbConv.otherUserAvatar ? (
-                  <AvatarImage src={selectedDbConv.otherUserAvatar} alt={selectedDbConv.otherUserName} />
-                ) : null}
-                <AvatarFallback className="text-2xl bg-primary text-primary-foreground font-semibold flex items-center justify-center w-full h-full">{selectedDbConv.otherUserName?.[0]?.toUpperCase()}</AvatarFallback>
-              </Avatar>
+          
+          <div className="flex flex-col items-center justify-between py-16 px-8 h-full w-full max-w-sm z-10">
+            <div className="flex flex-col items-center gap-6 mt-12 w-full">
+              <div className={cn("w-32 h-32 rounded-full p-1 transition-all duration-500", callState === "connected" ? "bg-gradient-to-tr from-green-400 to-emerald-500 scale-105" : "bg-gradient-to-tr from-primary to-violet-400")}>
+                <Avatar className="w-full h-full border-4 border-[#0f172a]">
+                  {selectedDbConv.otherUserAvatar ? (
+                    <AvatarImage src={selectedDbConv.otherUserAvatar} alt={selectedDbConv.otherUserName} />
+                  ) : null}
+                  <AvatarFallback className="text-3xl bg-primary text-primary-foreground font-semibold flex items-center justify-center w-full h-full">
+                    {selectedDbConv.otherUserName?.[0]?.toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+              <div className="text-center space-y-1">
+                <h2 className="text-2xl font-bold text-white tracking-tight">{selectedDbConv.otherUserName}</h2>
+                <p className="text-white/60 text-sm font-medium">{selectedDbConv.otherUserProfession}</p>
+                {callState === "calling" && (
+                  <p className="text-primary/90 text-sm font-medium animate-pulse mt-2 flex items-center justify-center gap-1">
+                    Calling...
+                  </p>
+                )}
+                {callState === "incoming" && (
+                  <p className="text-emerald-400 text-sm font-semibold animate-pulse mt-2">
+                    Incoming voice call...
+                  </p>
+                )}
+                {callState === "connected" && (
+                  <p className="text-emerald-400 font-mono text-lg font-semibold mt-2 tracking-widest">{formatDuration(callDuration)}</p>
+                )}
+              </div>
             </div>
-            <div className="text-center space-y-1">
-              <h2 className="text-2xl font-bold text-white">{selectedDbConv.otherUserName}</h2>
-              <p className="text-white/50 text-sm">{selectedDbConv.otherUserProfession}</p>
-              {callState === "ringing"
-                ? <p className="text-white/70 text-sm animate-pulse mt-2">Calling...</p>
-                : <p className="text-green-400 font-mono text-lg mt-2">{formatDuration(callDuration)}</p>}
-            </div>
+
+            {/* Call Screen Actions */}
             {callState === "connected" ? (
-              <div className="flex items-center gap-8">
+              <div className="flex items-center gap-8 mb-8">
                 <div className="flex flex-col items-center gap-2">
-                  <button onClick={() => setIsMuted(v => !v)} className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-colors", isMuted ? "bg-white text-gray-900" : "bg-white/10 text-white hover:bg-white/20")}>
-                    {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                  <button onClick={() => setIsMuted(v => !v)} className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95", isMuted ? "bg-white text-slate-900" : "bg-white/10 text-white hover:bg-white/20")}>
+                    {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                   </button>
-                  <span className="text-white/50 text-xs">{isMuted ? "Unmute" : "Mute"}</span>
+                  <span className="text-white/50 text-xs font-medium">{isMuted ? "Unmute" : "Mute"}</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
-                  <button onClick={endCall} className="w-16 h-16 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors shadow-lg shadow-red-500/40">
-                    <PhoneOff className="w-7 h-7 text-white" />
+                  <button onClick={endCall} className="w-16 h-16 bg-red-500 hover:bg-red-600 active:scale-95 rounded-full flex items-center justify-center transition-all shadow-lg shadow-red-500/30">
+                    <PhoneOff className="w-6 h-6 text-white" />
                   </button>
-                  <span className="text-white/50 text-xs">End</span>
+                  <span className="text-white/50 text-xs font-medium">End</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
-                  <button onClick={() => setIsSpeaker(v => !v)} className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-colors", isSpeaker ? "bg-white text-gray-900" : "bg-white/10 text-white hover:bg-white/20")}>
-                    <Volume2 className="w-6 h-6" />
+                  <button onClick={() => setIsSpeaker(v => !v)} className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-md active:scale-95", isSpeaker ? "bg-white text-slate-900" : "bg-white/10 text-white hover:bg-white/20")}>
+                    <Volume2 className="w-5 h-5" />
                   </button>
-                  <span className="text-white/50 text-xs">{isSpeaker ? "Speaker" : "Earpiece"}</span>
+                  <span className="text-white/50 text-xs font-medium">{isSpeaker ? "Speaker" : "Earpiece"}</span>
+                </div>
+              </div>
+            ) : callState === "incoming" ? (
+              <div className="flex items-center gap-12 mb-8">
+                <div className="flex flex-col items-center gap-2">
+                  <button onClick={declineCall} className="w-16 h-16 bg-red-500 hover:bg-red-600 active:scale-95 rounded-full flex items-center justify-center transition-all shadow-lg shadow-red-500/30">
+                    <PhoneOff className="w-6 h-6 text-white" />
+                  </button>
+                  <span className="text-white/50 text-xs font-medium">Decline</span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <button onClick={acceptCall} className="w-16 h-16 bg-emerald-500 hover:bg-emerald-600 active:scale-95 rounded-full flex items-center justify-center transition-all shadow-lg shadow-emerald-500/30">
+                    <Phone className="w-6 h-6 text-white animate-bounce" />
+                  </button>
+                  <span className="text-white/50 text-xs font-medium">Accept</span>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-2">
-                <button onClick={endCall} className="w-16 h-16 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors shadow-lg shadow-red-500/40">
-                  <PhoneOff className="w-7 h-7 text-white" />
+              <div className="flex flex-col items-center gap-2 mb-8">
+                <button onClick={cancelCall} className="w-16 h-16 bg-red-500 hover:bg-red-600 active:scale-95 rounded-full flex items-center justify-center transition-all shadow-lg shadow-red-500/30">
+                  <PhoneOff className="w-6 h-6 text-white" />
                 </button>
-                <span className="text-white/50 text-xs">Cancel</span>
+                <span className="text-white/50 text-xs font-medium">Cancel</span>
               </div>
             )}
           </div>

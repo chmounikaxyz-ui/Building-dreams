@@ -20,7 +20,7 @@ const defaultCoverImage = ""
 
 export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => void }) {
   const [activeTab, setLocalTab] = useState<"posts" | "saved">("posts")
-  const { userStories, addUserStory, deleteUserStory, userStoryWatched, setUserStoryWatched, posts: feedPosts, addPost, deletePost, toggleSavePost, toggleLikePost, deleteComment, reloadPosts, userAvatar, setUserAvatar, followingList, userLocation, detectLocation } = useApp()
+  const { userStories, addUserStory, deleteUserStory, userStoryWatched, setUserStoryWatched, posts: feedPosts, addPost, deletePost, toggleSavePost, toggleLikePost, addComment, deleteComment, reloadPosts, userAvatar, setUserAvatar, followingList, userLocation, detectLocation } = useApp()
   const { user } = useAuth()
   const [followerCount, setFollowerCount] = useState(0)
   const [showCommentInput, setShowCommentInput] = useState(false)
@@ -92,6 +92,7 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
     workerType: "",
   })
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
+  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false)
   const [editDraft, setEditDraft] = useState(profile)
 
   // Re-initialize profile from localStorage on mount so refreshes reflect actual logged-in user
@@ -201,7 +202,7 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
   const savedPosts = feedPosts.filter(p => p.isSaved)
   // My posts = filter strictly by user ID match to prevent unrelated fallback name matches
   const myPosts = feedPosts.filter(p => {
-    const pUserId = (p.user as any)?.id || p.userId
+    const pUserId = p.user?.id
     return pUserId && currentUserId && String(pUserId) === String(currentUserId)
   })
 
@@ -294,10 +295,12 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
           
           // Also update the database avatar endpoint
           if (user.id) {
-            fetch(`/api/users/${user.id}`, {
+            fetch("/api/users", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ avatar: newAvatar })
+              body: JSON.stringify({ userId: user.id, avatar: newAvatar })
+            }).then(() => {
+              window.dispatchEvent(new CustomEvent("auth-change", { detail: { userId: user.id } }))
             }).catch(console.error)
           }
         }
@@ -305,6 +308,30 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
         console.error("Failed to save avatar:", err)
       }
     } catch (err) { console.error(err) }
+  }
+
+  const handleRemoveAvatar = async () => {
+    setDisplayAvatar("")
+    setUserAvatar("")
+    try {
+      const stored = localStorage.getItem("auth_user")
+      if (stored) {
+        const user = JSON.parse(stored)
+        user.avatar = ""
+        localStorage.setItem("auth_user", JSON.stringify(user))
+        
+        if (user.id) {
+          await fetch("/api/users", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id, avatar: "" })
+          })
+          window.dispatchEvent(new CustomEvent("auth-change", { detail: { userId: user.id } }))
+        }
+      }
+    } catch (err) {
+      console.error("Failed to remove avatar:", err)
+    }
   }
 
   const handleSubmitPost = async () => {
@@ -379,7 +406,8 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
               variant="secondary"
               size="icon"
               className="absolute bottom-2 right-2 w-8 h-8 rounded-full shadow z-10"
-              onClick={() => avatarInputRef.current?.click()}
+              onClick={() => setIsAvatarMenuOpen(true)}
+              title="Profile photo options"
             >
               <Camera className="w-4 h-4" />
             </Button>
@@ -658,7 +686,7 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
                 </div>
               )}
 
-              {(user?.role === "seller" || user?.role === "worker") && (
+              {user?.role === "worker" && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Expected Rates</label>
                   <div className="relative">
@@ -1166,6 +1194,54 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
       )}
       </>, document.body
     )}
+      {isAvatarMenuOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsAvatarMenuOpen(false)}>
+          <div 
+            className="bg-card border border-border p-6 rounded-2xl max-w-sm w-full mx-4 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-bold text-card-foreground">Profile Picture</h3>
+              <p className="text-xs text-muted-foreground">Choose an action for your profile photo</p>
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <Button 
+                className="w-full rounded-xl h-11 text-xs font-semibold gap-2"
+                onClick={() => {
+                  setIsAvatarMenuOpen(false)
+                  avatarInputRef.current?.click()
+                }}
+              >
+                <Camera className="w-4 h-4" />
+                Upload New Photo
+              </Button>
+              
+              {displayAvatar && (
+                <Button 
+                  variant="destructive"
+                  className="w-full rounded-xl h-11 text-xs font-semibold gap-2 bg-red-500 hover:bg-red-600 text-white"
+                  onClick={() => {
+                    setIsAvatarMenuOpen(false)
+                    handleRemoveAvatar()
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Remove Current Photo
+                </Button>
+              )}
+              
+              <Button 
+                variant="ghost"
+                className="w-full rounded-xl h-11 text-xs font-semibold"
+                onClick={() => setIsAvatarMenuOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

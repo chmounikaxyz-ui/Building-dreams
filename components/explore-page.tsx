@@ -62,6 +62,10 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
   const [filterMinRating, setFilterMinRating] = useState(0)
   const [filterVerified, setFilterVerified] = useState(false)
   const [filterMaxKm, setFilterMaxKm] = useState<number>(0) // 0 = no limit
+  const [manualLocationInput, setManualLocationInput] = useState("")
+  const [searchingLocation, setSearchingLocation] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [exploreLocation, setExploreLocation] = useState<any>(null)
 
   const [professionals, setProfessionals] = useState<Professional[]>([])
 
@@ -136,7 +140,41 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
     fetchWorkers()
   }, [])
 
-  const { setSelectedConversation, setConversations, conversations, userLocation, detectLocation, hireRequests, setHireRequests, updateHireRequest } = useApp()
+  const { setSelectedConversation, setConversations, conversations, userLocation, detectLocation, setUserLocation, hireRequests, setHireRequests, updateHireRequest } = useApp()
+
+  const handleManualLocationSearch = async () => {
+    if (!manualLocationInput.trim()) return
+    setSearchingLocation(true)
+    setLocationError(null)
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(manualLocationInput)}&format=json&limit=1`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data[0]) {
+          const lat = parseFloat(data[0].lat)
+          const lon = parseFloat(data[0].lon)
+          const displayName = data[0].display_name.split(",")[0] + ", " + (data[0].display_name.split(",")[1] || "").trim()
+          
+          setExploreLocation({
+            lat,
+            lon,
+            city: displayName,
+            status: "success"
+          })
+          setManualLocationInput("")
+        } else {
+          setLocationError("Location not found. Please try a different city or area.")
+        }
+      } else {
+        setLocationError("Error searching location. Please try again.")
+      }
+    } catch (err) {
+      console.error("Manual location search error:", err)
+      setLocationError("Connection error. Please check your internet.")
+    } finally {
+      setSearchingLocation(false)
+    }
+  }
 
   // Get explorer info for hire requests
   const explorerInfo = (() => {
@@ -163,7 +201,7 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
   useEffect(() => {
     if (professionals.length === 0) return
     const myAcceptedRequests = hireRequests.filter(
-      r => r.explorerName === explorerInfo.name && r.status === "Accepted"
+      r => r.explorerName === explorerInfo.name && r.status === "Accepted" && r.location !== "Emergency"
     )
 
     let updated = false
@@ -215,8 +253,9 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
 
     let distance = "—"
     let _km = Infinity
-    if (userLocation?.status === "success") {
-      const km = haversineKm(userLocation.lat, userLocation.lon, pro.lat, pro.lon)
+    const activeLoc = exploreLocation || userLocation
+    if (activeLoc?.status === "success" || (activeLoc?.lat && activeLoc?.lon)) {
+      const km = haversineKm(activeLoc.lat, activeLoc.lon, pro.lat, pro.lon)
       distance = formatDistance(km)
       _km = km
     }
@@ -251,12 +290,25 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
     setHiredJobs(prev => prev.map(j => j.id === jobId ? { ...j, ratings, review } : j))
   }
 
-  const activeJobs = hiredJobs.filter(j => j.status === "Active")
-  const completedJobs = hiredJobs.filter(j => j.status === "Completed" && !j.hiddenFromExplorer)
+  const activeJobs = hiredJobs.filter(j => {
+    if (j.requestId) {
+      const req = hireRequests.find(r => r.id === j.requestId)
+      if (req && req.location === "Emergency") return false
+    }
+    return j.status === "Active"
+  })
+  
+  const completedJobs = hiredJobs.filter(j => {
+    if (j.requestId) {
+      const req = hireRequests.find(r => r.id === j.requestId)
+      if (req && req.location === "Emergency") return false
+    }
+    return j.status === "Completed" && !j.hiddenFromExplorer
+  })
 
   const hasClearableItems = activeSubTab === "orders"
     ? completedJobs.length > 0
-    : hireRequests.some(r => r.explorerName === explorerInfo.name && !r.hiddenFromExplorer && (r.status === "Accepted" || r.status === "Rejected"))
+    : hireRequests.some(r => r.explorerName === explorerInfo.name && !r.hiddenFromExplorer && r.location !== "Emergency" && (r.status === "Accepted" || r.status === "Rejected"))
 
   // Category → profession keyword map
   const categoryMap: Record<string, string> = {
@@ -422,7 +474,7 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
         >
           <Sliders className="w-4 h-4" />
           Filters
-          {(filterAvailable || filterVerified || filterMinRating > 0 || filterMaxKm > 0) && (
+          {(filterAvailable || filterMinRating > 0 || filterMaxKm > 0) && (
             <span className="w-2 h-2 bg-primary rounded-full" />
           )}
         </Button>
@@ -450,15 +502,6 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
             >
               ✅ Available Now
             </button>
-            <button
-              onClick={() => setFilterVerified(v => !v)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors",
-                filterVerified ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border text-secondary-foreground"
-              )}
-            >
-              ✓ Verified Only
-            </button>
             {[4, 4.5, 4.8].map(r => (
               <button
                 key={r}
@@ -474,7 +517,7 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
           </div>
 
           {/* Distance radius filter */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-card-foreground flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-primary" />
@@ -499,22 +542,73 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
               ))}
             </div>
 
-            {/* GPS detect button */}
-            {userLocation?.status !== "success" ? (
-              <button
-                onClick={detectLocation}
-                disabled={userLocation?.status === "detecting"}
-                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-primary/40 text-primary text-xs font-medium hover:bg-primary/5 transition-colors disabled:opacity-50"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                {userLocation?.status === "detecting" ? "Detecting your location..." : "Enable GPS for real distances"}
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl px-3 py-2">
-                <MapPin className="w-3.5 h-3.5 shrink-0" />
-                <span>Using your location: <strong>{userLocation.city}</strong> — distances are real</span>
+            {/* Manual Location Search Input */}
+            <div className="space-y-2 pt-2 border-t border-border">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-card-foreground">
+                  {exploreLocation?.city ? (
+                    <>Explore: <span className="text-primary font-bold">{exploreLocation.city}</span></>
+                  ) : userLocation?.city ? (
+                    <>Home: <span className="text-emerald-600 font-bold dark:text-emerald-400">{userLocation.city}</span></>
+                  ) : (
+                    "No active location"
+                  )}
+                </span>
+                {exploreLocation ? (
+                  <button 
+                    onClick={() => {
+                      setExploreLocation(null)
+                      setLocationError(null)
+                    }}
+                    className="text-[10px] text-primary underline hover:text-primary/80 font-medium"
+                  >
+                    Use Home Location
+                  </button>
+                ) : userLocation?.city ? (
+                  <button 
+                    onClick={() => {
+                      detectLocation()
+                      setLocationError(null)
+                    }}
+                    className="text-[10px] text-primary underline hover:text-primary/80 font-medium"
+                  >
+                    Use GPS
+                  </button>
+                ) : null}
               </div>
-            )}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search city or area (e.g. Mumbai)"
+                    value={manualLocationInput}
+                    onChange={(e) => {
+                      setManualLocationInput(e.target.value)
+                      if (locationError) setLocationError(null)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleManualLocationSearch()
+                      }
+                    }}
+                    className="pl-9 h-8 text-xs rounded-lg bg-secondary border-0"
+                  />
+                </div>
+                <Button
+                  onClick={handleManualLocationSearch}
+                  disabled={searchingLocation}
+                  className="h-8 px-3 rounded-lg text-xs"
+                >
+                  {searchingLocation ? "..." : "Set"}
+                </Button>
+              </div>
+              {locationError && (
+                <p className="text-[10px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                  ⚠️ {locationError}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -652,7 +746,11 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
 
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{pro.location}</span>
+                  <span>
+                    {pro.distance && pro.distance !== "—"
+                      ? `${pro.distance} away`
+                      : pro.location}
+                  </span>
                 </div>
               </div>
             </div>
@@ -710,9 +808,21 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
               >
                 <ShoppingBag className="w-4 h-4" />
                 <span>Active Jobs</span>
-                {hiredJobs.filter(j => !j.hiddenFromExplorer).length > 0 && (
+                {hiredJobs.filter(j => {
+                  if (j.requestId) {
+                    const req = hireRequests.find(r => r.id === j.requestId)
+                    if (req && req.location === "Emergency") return false
+                  }
+                  return !j.hiddenFromExplorer
+                }).length > 0 && (
                   <span className="bg-primary/10 text-primary text-xs px-1.5 py-0.5 rounded-full font-bold ml-1">
-                    {hiredJobs.filter(j => !j.hiddenFromExplorer).length}
+                    {hiredJobs.filter(j => {
+                      if (j.requestId) {
+                        const req = hireRequests.find(r => r.id === j.requestId)
+                        if (req && req.location === "Emergency") return false
+                      }
+                      return !j.hiddenFromExplorer
+                    }).length}
                   </span>
                 )}
               </button>
@@ -727,9 +837,9 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
               >
                 <Calendar className="w-4 h-4" />
                 <span>Hire Requests</span>
-                {hireRequests.filter(r => r.explorerName === explorerInfo.name && r.status !== "Completed" && !r.hiddenFromExplorer).length > 0 && (
+                {hireRequests.filter(r => r.explorerName === explorerInfo.name && r.status !== "Completed" && !r.hiddenFromExplorer && r.location !== "Emergency").length > 0 && (
                   <span className="bg-primary/10 text-primary text-xs px-1.5 py-0.5 rounded-full font-bold ml-1">
-                    {hireRequests.filter(r => r.explorerName === explorerInfo.name && r.status !== "Completed" && !r.hiddenFromExplorer).length}
+                    {hireRequests.filter(r => r.explorerName === explorerInfo.name && r.status !== "Completed" && !r.hiddenFromExplorer && r.location !== "Emergency").length}
                   </span>
                 )}
               </button>
@@ -834,7 +944,7 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
               ) : (
                 <div className="space-y-6">
                   {(() => {
-                    const myReqs = hireRequests.filter(r => r.explorerName === explorerInfo.name && r.status !== "Completed" && !r.hiddenFromExplorer)
+                    const myReqs = hireRequests.filter(r => r.explorerName === explorerInfo.name && r.status !== "Completed" && !r.hiddenFromExplorer && r.location !== "Emergency")
                     return myReqs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
                         <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">

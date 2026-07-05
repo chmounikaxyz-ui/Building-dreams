@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Phone, MapPin, Clock, Star, AlertTriangle, Zap, Droplets, Wrench, Shield, CheckCircle, X, CalendarClock } from "lucide-react"
+import { Phone, MapPin, Clock, Star, AlertTriangle, Zap, Droplets, Wrench, Shield, CheckCircle, X, CalendarClock, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -16,10 +16,10 @@ const emergencyServices = [
     description: "Power outages, short circuits"
   },
   {
-    id: "repair",
-    label: "General Repair",
-    icon: Wrench,
-    description: "Door, window, wall damage"
+    id: "plumbing",
+    label: "Plumber",
+    icon: Droplets,
+    description: "Leaking pipes, blockages, water issues"
   },
   {
     id: "security",
@@ -35,80 +35,19 @@ const emergencyServices = [
   },
 ]
 
-const defaultEmergencyWorkers = [
-  {
-    id: "mock-1",
-    name: "Rajesh Helper",
-    service: "others",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face",
-    rating: 4.9,
-    reviews: 234,
-    lat: 19.0820,
-    lon: 72.8820,
-    defaultDistance: "0.8 km",
-    defaultEta: "15 min",
-    rate: "₹500",
-    available: true,
-    verified: true
-  },
-  {
-    id: "mock-2",
-    name: "Amit Electrician",
-    service: "electrical",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face",
-    rating: 4.8,
-    reviews: 189,
-    lat: 19.0850,
-    lon: 72.8850,
-    defaultDistance: "1.2 km",
-    defaultEta: "20 min",
-    rate: "₹400",
-    available: true,
-    verified: true
-  },
-  {
-    id: "mock-3",
-    name: "Sunil Repairs",
-    service: "repair",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=face",
-    rating: 4.7,
-    reviews: 156,
-    lat: 19.0880,
-    lon: 72.8880,
-    defaultDistance: "1.5 km",
-    defaultEta: "25 min",
-    rate: "₹350",
-    available: true,
-    verified: true
-  },
-  {
-    id: "mock-4",
-    name: "Quick Lock Service",
-    service: "security",
-    avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=100&h=100&fit=crop&crop=face",
-    rating: 4.6,
-    reviews: 98,
-    lat: 19.0920,
-    lon: 72.8920,
-    defaultDistance: "2.1 km",
-    defaultEta: "30 min",
-    rate: "₹600",
-    available: true,
-    verified: true
-  },
-]
+const defaultEmergencyWorkers: any[] = []
 
 const getServiceFromProfession = (prof: string): string => {
   const p = prof.toLowerCase()
-  if (p.includes("plumb")) return "others"
+  if (p.includes("plumb")) return "plumbing"
   if (p.includes("electr")) return "electrical"
-  if (p.includes("repair")) return "repair"
+  if (p.includes("repair")) return "others"
   if (p.includes("security") || p.includes("lock")) return "security"
   if (p.includes("other")) return "others"
-  return "repair"
+  return "others"
 }
 
-export function EmergencyPage() {
+export function EmergencyPage({ setActiveTab }: { setActiveTab?: (tab: string) => void }) {
   const { userLocation, detectLocation, hireRequests, setHireRequests, updateHireRequest } = useApp()
   const [selectedService, setSelectedService] = useState<string | null>(null)
   const [bookingWorker, setBookingWorker] = useState<any | null>(null)
@@ -187,6 +126,8 @@ export function EmergencyPage() {
       }
     }
     fetchDbWorkers()
+    const intervalId = setInterval(fetchDbWorkers, 4000)
+    return () => clearInterval(intervalId)
   }, [])
 
   // Combine DB workers and fallback mock workers
@@ -211,12 +152,14 @@ export function EmergencyPage() {
       eta = `${etaMins} min`
     }
 
-    // Apply any ratings given by this explorer
-    const myRating = workerRatings[worker.id]
-    const finalReviews = myRating ? (worker.reviews + 1) : worker.reviews
-    const finalRating = myRating
-      ? Math.round(((worker.rating * worker.reviews + myRating.given) / finalReviews) * 10) / 10
-      : worker.rating
+    // Calculate average rating based on all ratings given by explorers in hireRequests
+    const workerReqs = hireRequests.filter(r => r.workerName === worker.name && typeof r.rating === "number")
+    const finalReviews = workerReqs.length > 0 ? workerReqs.length : worker.reviews
+    let finalRating = worker.rating
+    if (workerReqs.length > 0) {
+      const sum = workerReqs.reduce((acc, r) => acc + (r.rating || 0), 0)
+      finalRating = Math.round((sum / workerReqs.length) * 10) / 10
+    }
 
     return { ...worker, distance, eta, _km, reviews: finalReviews, rating: finalRating }
   })
@@ -237,13 +180,15 @@ export function EmergencyPage() {
     setConfirmed(false)
   }
 
+  const handleMessageWorker = (workerId: string) => {
+    localStorage.setItem("active_chat_other_user_id", workerId)
+    setActiveTab?.("messages")
+  }
+
   const handleConfirmBooking = () => {
     if (!bookingWorker) return
     setConfirmed(true)
     setTimeout(() => {
-      // Persist booking
-      const next = { ...activeBookings, [bookingWorker.id]: "booked" as const }
-      saveActiveBookings(next)
       // Add as hire request so worker's My Jobs page receives it
       const newRequest = {
         id: Date.now(),
@@ -251,9 +196,11 @@ export function EmergencyPage() {
         workerProfession: emergencyServices.find(s => s.id === bookingWorker.service)?.label || "Emergency",
         workerAvatar: bookingWorker.avatar || "",
         explorerName: explorerInfo.name || "Explorer",
-        startDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+        explorerAvatar: explorerInfo.avatar || "",
+        explorerPhone: explorerInfo.phone || "",
+        jobTitle: "Emergency Job",
         location: "Emergency",
-        status: "Accepted" as const,
+        status: "Pending" as const,
         hiddenFromExplorer: false,
       }
       setHireRequests((prev: any[]) => [newRequest, ...prev])
@@ -263,8 +210,14 @@ export function EmergencyPage() {
   }
 
   const handleMarkCompleted = (workerId: string, workerName: string) => {
-    const next = { ...activeBookings, [workerId]: "completed" as const }
-    saveActiveBookings(next)
+    // Find the active request and mark it completed
+    const req = [...hireRequests]
+      .reverse()
+      .find(r => r.workerName === workerName && r.explorerName === explorerInfo.name && r.location === "Emergency" && r.status === "Accepted")
+    if (req) {
+      updateHireRequest(req.id, "Completed")
+    }
+
     // Prompt for rating
     setPendingRating({ workerId, workerName })
     setRatingStars(0)
@@ -273,7 +226,76 @@ export function EmergencyPage() {
 
   const handleSubmitRating = () => {
     if (!pendingRating || ratingStars === 0) return
-    setWorkerRatings(prev => ({ ...prev, [pendingRating.workerId]: { given: ratingStars, count: 1 } }))
+
+    // Find the most recent completed but unrated request for this worker
+    const targetReq = [...hireRequests]
+      .reverse()
+      .find(r => r.workerName === pendingRating.workerName && r.explorerName === explorerInfo.name && r.location === "Emergency" && r.status === "Completed" && !r.rating)
+
+    const updatedHireRequests = hireRequests.map(r => {
+      if (targetReq && r.id === targetReq.id) {
+        return { ...r, rating: ratingStars }
+      }
+      return r
+    })
+
+    // Save to context
+    setHireRequests(updatedHireRequests)
+
+    // Calculate average rating of all ratings given by explorers
+    const workerRatingsList = updatedHireRequests
+      .filter(r => r.workerName === pendingRating.workerName && typeof r.rating === "number")
+      .map(r => r.rating as number)
+
+    let newAvg = ratingStars
+    if (workerRatingsList.length > 0) {
+      const sum = workerRatingsList.reduce((a, b) => a + b, 0)
+      newAvg = Math.round((sum / workerRatingsList.length) * 10) / 10
+    }
+
+    // Update database
+    fetch(`/api/users/${pendingRating.workerId}`)
+      .then(res => res.json())
+      .then(dbUser => {
+        let bioJSON: any = { bio: "", experience: "", workerType: "emergency", coverImage: "", expectedRates: "", available: true, reviewsCount: 0 }
+        if (dbUser.bio) {
+          try {
+            if (dbUser.bio.trim().startsWith("{") && dbUser.bio.trim().endsWith("}")) {
+              bioJSON = JSON.parse(dbUser.bio)
+            } else {
+              bioJSON.bio = dbUser.bio
+            }
+          } catch {}
+        }
+        bioJSON.reviewsCount = workerRatingsList.length
+        const newBioString = JSON.stringify(bioJSON)
+
+        fetch("/api/users", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: pendingRating.workerId, rating: newAvg, bio: newBioString })
+        })
+          .then(res => {
+            if (res.ok) {
+              setDbWorkers(prev => prev.map(w => w.id === pendingRating.workerId ? { ...w, rating: newAvg, reviews: workerRatingsList.length } : w))
+            }
+          })
+          .catch(err => console.error("Error updating worker rating/bio in DB:", err))
+      })
+      .catch(err => {
+        fetch("/api/users", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: pendingRating.workerId, rating: newAvg })
+        })
+          .then(res => {
+            if (res.ok) {
+              setDbWorkers(prev => prev.map(w => w.id === pendingRating.workerId ? { ...w, rating: newAvg } : w))
+            }
+          })
+          .catch(err => console.error("Error updating worker rating in DB:", err))
+      })
+
     setPendingRating(null)
     setRatingStars(0)
   }
@@ -359,7 +381,10 @@ export function EmergencyPage() {
 
         <div className="space-y-3">
           {sortedWorkers.map((worker) => {
-            const bookingState = activeBookings[worker.id]
+            const req = hireRequests.filter(r => r.workerName === worker.name && r.explorerName === explorerInfo.name && r.location === "Emergency")
+              .sort((a, b) => b.id - a.id)[0]
+            const bookingState = (req && !(req.status === "Completed" && req.rating)) ? req.status : null
+
             return (
               <div key={worker.id} className="group flex items-center gap-4 rounded-2xl border border-slate-200/75 bg-white px-5 py-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md dark:bg-card dark:border-border">
                 {/* Avatar */}
@@ -391,19 +416,28 @@ export function EmergencyPage() {
                     ) : (
                       <span className="text-slate-400 italic">No reviews yet</span>
                     )}
-                    <span className="text-slate-300">·</span>
-                    <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-slate-400" />{worker.distance}</span>
+                    {worker.distance && worker.distance !== "0 m" && worker.distance !== "0m" && (
+                      <>
+                        <span className="text-slate-300">·</span>
+                        <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-slate-400" />{worker.distance}</span>
+                      </>
+                    )}
                     <span className="text-slate-300">·</span>
                     <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3 text-slate-400" />{worker.eta}</span>
                   </div>
-                  {bookingState === "booked" && (
+                  {bookingState === "Pending" && (
+                    <p className="text-xs text-primary font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3 animate-pulse" /> Pending worker acceptance…
+                    </p>
+                  )}
+                  {bookingState === "Accepted" && (
                     <p className="text-xs text-emerald-600 font-medium flex items-center gap-1">
                       <CheckCircle className="w-3 h-3" /> On the way…
                     </p>
                   )}
-                  {bookingState === "completed" && workerRatings[worker.id] && (
-                    <p className="text-xs text-slate-400 flex items-center gap-1">
-                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> You rated {workerRatings[worker.id].given}/5
+                  {bookingState === "Rejected" && (
+                    <p className="text-xs text-red-500 font-medium">
+                      Request declined. You can book again.
                     </p>
                   )}
                 </div>
@@ -414,21 +448,46 @@ export function EmergencyPage() {
                     <p className="text-base font-bold text-slate-950 dark:text-card-foreground">{worker.rate}</p>
                     <p className="text-[0.6rem] uppercase tracking-widest text-slate-400">visit charge</p>
                   </div>
-                  {bookingState === "booked" ? (
-                    <Button size="sm" className="h-9 px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => handleMarkCompleted(worker.id, worker.name)}>
-                      <CheckCircle className="w-3.5 h-3.5 mr-1" />
-                      Mark Complete
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 rounded-full border-slate-200 hover:bg-slate-50 hover:text-primary text-slate-500"
+                      onClick={() => handleMessageWorker(worker.id)}
+                    >
+                      <MessageSquare className="w-4 h-4" />
                     </Button>
-                  ) : bookingState === "completed" ? (
-                    <span className="text-xs font-semibold text-slate-400 px-2">✓ Done</span>
-                  ) : (
-                    <Button size="sm" className="h-9 px-4 rounded-full"
-                      onClick={() => handleEmergencyRequest(worker)}
-                      disabled={!worker.available}>
-                      {worker.available ? "Book Now" : "Busy"}
-                    </Button>
-                  )}
+                    {bookingState === "Pending" ? (
+                      <Button size="sm" className="h-9 px-4 rounded-full bg-primary text-white font-medium pointer-events-none shadow-sm">
+                        Requested
+                      </Button>
+                    ) : bookingState === "Accepted" ? (
+                      <Button size="sm" className="h-9 px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => handleMarkCompleted(worker.id, worker.name)}>
+                        <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                        Mark Complete
+                      </Button>
+                    ) : bookingState === "Completed" ? (
+                      req.rating ? (
+                        <span className="text-xs font-semibold text-slate-400 px-2">✓ Done</span>
+                      ) : (
+                        <Button size="sm" className="h-9 px-4 rounded-full bg-primary hover:bg-primary/90 text-white"
+                          onClick={() => {
+                            setPendingRating({ workerId: worker.id, workerName: worker.name })
+                            setRatingStars(0)
+                            setHoverStar(0)
+                          }}>
+                          Rate Service
+                        </Button>
+                      )
+                    ) : (
+                      <Button size="sm" className="h-9 px-4 rounded-full"
+                        onClick={() => handleEmergencyRequest(worker)}
+                        disabled={!worker.available}>
+                        {worker.available ? "Book Now" : "Busy"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -442,9 +501,9 @@ export function EmergencyPage() {
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
             {confirmed ? (
               <div className="flex flex-col items-center justify-center p-10 gap-3">
-                <CheckCircle className="w-14 h-14 text-emerald-500" />
-                <h3 className="text-lg font-bold text-slate-900">Booking Confirmed!</h3>
-                <p className="text-sm text-slate-500 text-center">{bookingWorker.name} is on the way. ETA: {bookingWorker.eta}</p>
+                <Clock className="w-14 h-14 text-primary animate-pulse" />
+                <h3 className="text-lg font-bold text-slate-900">Request Sent!</h3>
+                <p className="text-sm text-slate-500 text-center">Waiting for {bookingWorker.name} to accept your emergency request.</p>
               </div>
             ) : (
               <>
@@ -465,7 +524,10 @@ export function EmergencyPage() {
                       <p className="text-xs text-slate-500">{emergencyServices.find(s => s.id === bookingWorker.service)?.label}</p>
                       <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
                         <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                        {bookingWorker.rating} · {bookingWorker.distance} away
+                        {bookingWorker.rating}
+                        {bookingWorker.distance && bookingWorker.distance !== "0 m" && bookingWorker.distance !== "0m" && bookingWorker.distance !== "0 m away" && bookingWorker.distance !== "0m away" && (
+                          <> · {bookingWorker.distance} away</>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
@@ -473,9 +535,9 @@ export function EmergencyPage() {
                       <p className="text-[10px] text-slate-400 uppercase tracking-wide">visit charge</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-                    <CalendarClock className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>Estimated arrival: <span className="font-semibold text-amber-700">{bookingWorker.eta}</span></span>
+                  <div className="flex items-center gap-2 text-sm text-slate-600 bg-violet-50 border border-violet-100 dark:bg-violet-950/20 dark:border-violet-900/30 rounded-xl px-3 py-2">
+                    <CalendarClock className="w-4 h-4 text-primary shrink-0" />
+                    <span>Estimated arrival: <span className="font-semibold text-primary">{bookingWorker.eta}</span></span>
                   </div>
                   <Button className="w-full rounded-xl" onClick={handleConfirmBooking}>
                     Confirm &amp; Book

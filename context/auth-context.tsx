@@ -31,11 +31,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const storedToken = localStorage.getItem("auth_token")
-    const storedUser = localStorage.getItem("auth_user")
-    if (storedToken && storedUser) {
-      setToken(storedToken)
-      setUser(JSON.parse(storedUser))
+    try {
+      const storedToken = localStorage.getItem("auth_token")
+      const storedUser = localStorage.getItem("auth_user")
+      if (storedToken && storedUser) {
+        setToken(storedToken)
+        setUser(JSON.parse(storedUser))
+      }
+    } catch (err) {
+      console.error("Failed to initialize auth state:", err)
     }
   }, [])
 

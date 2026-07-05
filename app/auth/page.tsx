@@ -45,7 +45,7 @@ const workerSkills = [
   "Other",
 ]
 
-const emergencySkills = ["Electrical", "General Repair", "Security", "Others"]
+const emergencySkills = ["Electrical", "Plumber", "Security", "Others"]
 
 export default function AuthPage() {
   const router = useRouter()

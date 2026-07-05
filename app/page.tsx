@@ -48,6 +48,76 @@ export default function Home() {
     return () => window.removeEventListener("auth-change", syncRole)
   }, [router])
 
+  useEffect(() => {
+    let intervalId: any = null
+
+    const updateLocation = () => {
+      const stored = localStorage.getItem("auth_user")
+      if (!stored) return
+      try {
+        const user = JSON.parse(stored)
+        if (user.role !== "worker" || !user.id) return
+
+        let isAvailable = true
+        if (user.bio) {
+          if (user.bio.trim().startsWith("{") && user.bio.trim().endsWith("}")) {
+            const p = JSON.parse(user.bio)
+            if (p.available !== undefined) {
+              isAvailable = p.available
+            }
+          }
+        }
+
+        if (isAvailable && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              const { latitude, longitude } = position.coords
+              
+              // Update local storage
+              const currentStored = localStorage.getItem("auth_user")
+              if (currentStored) {
+                try {
+                  const parsed = JSON.parse(currentStored)
+                  parsed.lat = latitude
+                  parsed.lon = longitude
+                  localStorage.setItem("auth_user", JSON.stringify(parsed))
+                } catch {}
+              }
+
+              // Update in database
+              try {
+                await fetch("/api/users", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId: user.id,
+                    lat: latitude,
+                    lon: longitude
+                  })
+                })
+              } catch (err) {
+                console.error("Error updating location in DB:", err)
+              }
+            },
+            (err) => {
+              console.error("Error getting current position:", err)
+            },
+            { enableHighAccuracy: true }
+          )
+        }
+      } catch (err) {
+        console.error("Error in location tracker loop:", err)
+      }
+    }
+
+    updateLocation()
+    intervalId = setInterval(updateLocation, 5000)
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [])
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -64,7 +134,7 @@ export default function Home() {
       case "materials": return userRole === "seller" ? <SellerStorePage /> : <MaterialsPage setActiveTab={setActiveTab} />
       case "mystore":   return <SellerStorePage />
       case "myjobs":    return <WorkerJobsPage setActiveTab={setActiveTab} />
-      case "emergency": return <EmergencyPage />
+      case "emergency": return <EmergencyPage setActiveTab={setActiveTab} />
       case "tools":     return <ToolsPage />
       case "profile":   return <ProfilePage setActiveTab={setActiveTab} />
       case "settings":  return <SettingsPage setActiveTab={setActiveTab} />
