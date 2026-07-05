@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Bell, Search, Star, MapPin, BadgeCheck, X, Check, BriefcaseBusiness, Clock, MessageCircle } from "lucide-react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { Bell, Search, Star, MapPin, BadgeCheck, X, Check, BriefcaseBusiness, Clock, MessageCircle, Trash2 } from "lucide-react"
 import { haversineKm, formatDistance } from "@/lib/location"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -64,146 +64,116 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
   const [locationError, setLocationError] = useState<string | null>(null)
   const [dbWorkers, setDbWorkers] = useState<any[]>([])
   const notifRef = useRef<HTMLDivElement>(null)
+  const bellRef = useRef<HTMLButtonElement>(null)
+  const [notifPos, setNotifPos] = useState<{ top: number; right: number } | null>(null)
 
   const currentUserId = user?.id || ""
   const currentUserName = user?.name || ""
 
-  // Local storage notifications read state
-  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return []
-    try {
-      return JSON.parse(localStorage.getItem(`read_notifications_${currentUserId}`) || "[]")
-    } catch {
-      return []
-    }
-  })
+  const [dbNotifications, setDbNotifications] = useState<any[]>([])
 
-  useEffect(() => {
-    if (currentUserId) {
-      try {
-        const stored = localStorage.getItem(`read_notifications_${currentUserId}`)
-        setReadNotifIds(stored ? JSON.parse(stored) : [])
-      } catch {
-        setReadNotifIds([])
+  const fetchNotifications = useCallback(async () => {
+    if (!currentUserId) {
+      console.log("[Notifications Debug] currentUserId is empty");
+      return
+    }
+    try {
+      console.log(`[Notifications Debug] Fetching notifications for userId: ${currentUserId}`);
+      const res = await fetch(`/api/notifications?userId=${currentUserId}`)
+      console.log(`[Notifications Debug] Response status: ${res.status}`);
+      if (res.ok) {
+        const data = await res.json()
+        console.log("[Notifications Debug] Received notifications:", data);
+        setDbNotifications(data)
+      } else {
+        console.error("[Notifications Debug] API error:", await res.text());
       }
+    } catch (err) {
+      console.error("[Notifications Debug] Fetch failed:", err)
     }
   }, [currentUserId])
 
-  const saveReadNotifIds = (next: string[]) => {
-    setReadNotifIds(next)
-    if (currentUserId) {
+  useEffect(() => {
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 5000)
+    return () => clearInterval(interval)
+  }, [fetchNotifications])
+
+  const notifList = dbNotifications.map(n => {
+    let timeStr = "Just now"
+    if (n.createdAt) {
       try {
-        localStorage.setItem(`read_notifications_${currentUserId}`, JSON.stringify(next))
+        const diff = Date.now() - new Date(n.createdAt).getTime()
+        const mins = Math.floor(diff / 60000)
+        const hrs = Math.floor(mins / 60)
+        const days = Math.floor(hrs / 24)
+        if (mins < 1) timeStr = "Just now"
+        else if (mins < 60) timeStr = `${mins} min ago`
+        else if (hrs < 24) timeStr = `${hrs} hr ago`
+        else timeStr = `${days} days ago`
       } catch {}
     }
-  }
-
-  // Dismissed (cleared) notifications — hidden permanently until new ID
-  const [dismissedNotifIds, setDismissedNotifIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return []
-    try {
-      return JSON.parse(localStorage.getItem(`dismissed_notifications_${currentUserId}`) || "[]")
-    } catch {
-      return []
+    return {
+      id: n.id,
+      text: n.text,
+      time: timeStr,
+      avatar: n.sender?.avatar || "",
+      read: n.read,
+      type: n.type,
+      postId: n.postId,
+      conversationId: n.conversationId
     }
   })
-
-  useEffect(() => {
-    if (currentUserId) {
-      try {
-        const stored = localStorage.getItem(`dismissed_notifications_${currentUserId}`)
-        setDismissedNotifIds(stored ? JSON.parse(stored) : [])
-      } catch {
-        setDismissedNotifIds([])
-      }
-    }
-  }, [currentUserId])
-
-  const saveDismissedNotifIds = (next: string[]) => {
-    setDismissedNotifIds(next)
-    if (currentUserId) {
-      try {
-        localStorage.setItem(`dismissed_notifications_${currentUserId}`, JSON.stringify(next))
-      } catch {}
-    }
-  }
-
-  // Derive notifications dynamically from real database updates
-  const messageNotifs = conversations
-    .filter(c => c.unread > 0)
-    .map(c => ({
-      id: `msg_${c.id}_${c.unread}`,
-      text: `New message from ${c.name}: "${c.lastMessage}"`,
-      time: c.timestamp || "Just now",
-      avatar: c.avatar
-    }))
-
-  const workerNotifs = hireRequests
-    .filter(r => r.workerName === currentUserName && r.status === "Pending")
-    .map(r => ({
-      id: `hire_pending_${r.id}`,
-      text: `${r.explorerName} requested to hire you for "${r.jobTitle}"`,
-      time: r.date || "Just now",
-      avatar: r.explorerAvatar
-    }))
-
-  const explorerNotifs = hireRequests
-    .filter(r => r.explorerName === currentUserName && (r.status === "Accepted" || r.status === "Rejected"))
-    .map(r => ({
-      id: `hire_status_${r.id}_${r.status}`,
-      text: `${r.workerName} ${r.status.toLowerCase()} your hire request`,
-      time: r.date || "Just now",
-      avatar: r.workerAvatar
-    }))
-
-  const sellerNotifs = [
-    ...sellerOrders.filter(o => o.status === "Pending").map(o => ({
-      id: `order_${o.id}`,
-      text: `New order from ${o.buyerName} for ${o.productName}`,
-      time: o.date || "Just now",
-      avatar: ""
-    })),
-    ...sellerPreOrders.filter(p => p.status === "Pending").map(p => ({
-      id: `preorder_${p.id}`,
-      text: `New pre-order from ${p.buyerName} for ${p.productName}`,
-      time: p.date || "Just now",
-      avatar: ""
-    }))
-  ]
-
-  // Add default mock items at the bottom if needed, but filter them with static string IDs
-  const mockNotifs = [
-    { id: "mock_1", text: "Ramesh Kumar accepted your booking request", time: "2 min ago", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face" },
-    { id: "mock_2", text: "Priya Sharma liked your post", time: "15 min ago", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face" },
-    { id: "mock_3", text: "New message from Suresh Patel", time: "1 hr ago", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=face" }
-  ]
-
-  const rawNotifs = [
-    ...messageNotifs,
-    ...workerNotifs,
-    ...explorerNotifs,
-    ...sellerNotifs,
-    ...mockNotifs
-  ].filter(n => !dismissedNotifIds.includes(n.id))
-
-  const notifList = rawNotifs.map(n => ({
-    ...n,
-    read: readNotifIds.includes(n.id)
-  }))
 
   const unreadCount = notifList.filter(n => !n.read).length
 
-  const clearAllNotifs = () => {
-    const allIds = rawNotifs.map(n => String(n.id))
-    saveDismissedNotifIds([...new Set([...dismissedNotifIds, ...allIds])])
-    // Also mark as read
-    saveReadNotifIds([...new Set([...readNotifIds, ...allIds])])
+  const clearAllNotifs = async () => {
+    setDbNotifications([])
     setShowNotifications(false)
+    try {
+      await fetch(`/api/notifications?userId=${currentUserId}`, {
+        method: "DELETE"
+      })
+    } catch (err) {
+      console.error("Failed to clear all notifications:", err)
+    }
   }
+
+  const dismissNotif = async (id: string | number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDbNotifications(prev => prev.filter(n => n.id !== id))
+    try {
+      await fetch(`/api/notifications?id=${id}`, {
+        method: "DELETE"
+      })
+    } catch (err) {
+      console.error("Failed to delete notification:", err)
+    }
+  }
+
+  const openNotifications = useCallback(() => {
+    if (!showNotifications && bellRef.current) {
+      const rect = bellRef.current.getBoundingClientRect()
+      setNotifPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right })
+      
+      if (currentUserId && notifList.some(n => !n.read)) {
+        setDbNotifications(prev => prev.map(n => ({ ...n, read: true })))
+        fetch("/api/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUserId })
+        }).catch(err => console.error("Failed to mark all as read:", err))
+      }
+    }
+    setShowNotifications(v => !v)
+  }, [showNotifications, currentUserId, notifList])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+      if (
+        notifRef.current && !notifRef.current.contains(e.target as Node) &&
+        bellRef.current && !bellRef.current.contains(e.target as Node)
+      ) {
         setShowNotifications(false)
       }
     }
@@ -327,13 +297,26 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
   }
 
   const markAllRead = () => {
-    const allIds = notifList.map(n => String(n.id))
-    saveReadNotifIds([...new Set([...readNotifIds, ...allIds])])
+    setDbNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    if (currentUserId) {
+      fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId })
+      }).catch(err => console.error("Failed to mark all as read:", err))
+    }
   }
-  const markRead = (id: string | number) => {
-    const strId = String(id)
-    if (!readNotifIds.includes(strId)) {
-      saveReadNotifIds([...readNotifIds, strId])
+
+  const markRead = async (id: string | number) => {
+    setDbNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      })
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err)
     }
   }
 
@@ -436,36 +419,19 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
           <Input placeholder="Search professionals..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 bg-secondary border-0 rounded-xl" />
           {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-3.5 h-3.5 text-muted-foreground" /></button>}
         </div>
-        <div className="relative flex shrink-0" ref={notifRef}>
+        <div className="relative flex shrink-0">
           <button 
+            ref={bellRef}
             className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors relative" 
-            onClick={() => setShowNotifications(v => !v)}
+            onClick={openNotifications}
           >
             <Bell className={cn("w-5 h-5", showNotifications && "text-primary")} />
-            {unreadCount > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">{unreadCount}</span>}
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
-          
-          {/* Notifications Panel */}
-          {showNotifications && (
-            <div className="absolute right-0 top-12 w-72 bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-30">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-                <h3 className="font-semibold text-sm text-card-foreground">Notifications</h3>
-                <button onClick={markAllRead} className="text-xs text-primary hover:underline">Mark all read</button>
-              </div>
-              <div className="max-h-72 overflow-y-auto divide-y divide-border bg-card">
-                {notifList.map(n => (
-                  <div key={n.id} onClick={() => markRead(n.id)} className={cn("flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-secondary/50 transition-colors bg-card", !n.read && "bg-primary/5")}>
-                    {n.avatar ? <Avatar className="w-8 h-8 shrink-0"><AvatarImage src={n.avatar} /><AvatarFallback>N</AvatarFallback></Avatar> : <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><BriefcaseBusiness className="w-4 h-4 text-primary" /></div>}
-                    <div className="flex-1 min-w-0">
-                      <p className={cn("text-xs leading-snug", !n.read ? "text-card-foreground font-medium" : "text-muted-foreground")}>{n.text}</p>
-                      <div className="flex items-center gap-1 mt-1"><Clock className="w-3 h-3 text-muted-foreground" /><span className="text-[10px] text-muted-foreground">{n.time}</span></div>
-                    </div>
-                    {!n.read && <span className="w-2 h-2 bg-primary rounded-full shrink-0 mt-1" />}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -596,6 +562,92 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
         onMessage={handleMessage}
         onHire={() => setIsModalOpen(false)}
       />
+
+      {/* Notifications Panel — rendered outside aside to avoid overflow clipping */}
+      {showNotifications && notifPos && (
+        <div
+          ref={notifRef}
+          style={{ position: "fixed", top: notifPos.top, right: notifPos.right, zIndex: 9999 }}
+          className="w-80 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-primary" />
+              <h3 className="font-semibold text-sm text-card-foreground">Notifications</h3>
+              {unreadCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {notifList.length > 0 && (
+                <button
+                  onClick={clearAllNotifs}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  title="Clear all"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clear all</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowNotifications(false)}
+                className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Notification list */}
+          <div className="max-h-80 overflow-y-auto divide-y divide-border">
+            {notifList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                <Bell className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">You&apos;re all caught up!</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">No new notifications</p>
+              </div>
+            ) : (
+              notifList.map(n => (
+                <div
+                  key={n.id}
+                  onClick={() => markRead(n.id)}
+                  className={cn(
+                    "flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-secondary/50 transition-colors group",
+                    !n.read && "bg-primary/5"
+                  )}
+                >
+                  {n.avatar
+                    ? <Avatar className="w-8 h-8 shrink-0"><AvatarImage src={n.avatar} /><AvatarFallback>N</AvatarFallback></Avatar>
+                    : <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><BriefcaseBusiness className="w-4 h-4 text-primary" /></div>
+                  }
+                  <div className="flex-1 min-w-0">
+                    <p className={cn("text-xs leading-snug", !n.read ? "text-card-foreground font-medium" : "text-muted-foreground")}>
+                      {n.text}
+                    </p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Clock className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground">{n.time}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {!n.read && <span className="w-2 h-2 bg-primary rounded-full mt-1" />}
+                    <button
+                      onClick={(e) => dismissNotif(n.id, e)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-secondary ml-1"
+                      title="Dismiss"
+                    >
+                      <X className="w-3 h-3 text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

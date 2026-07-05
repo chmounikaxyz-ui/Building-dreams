@@ -43,6 +43,20 @@ export async function POST(req: NextRequest) {
         },
       })
 
+      // Create notification for followed user
+      const follower = await prisma.user.findUnique({
+        where: { id: followerId },
+        select: { name: true }
+      })
+      await prisma.notification.create({
+        data: {
+          userId: followingId,
+          senderId: followerId,
+          type: "follow",
+          text: `${follower?.name || "Someone"} started following you`
+        }
+      })
+
       return NextResponse.json({ following: true })
     }
   } catch (error) {

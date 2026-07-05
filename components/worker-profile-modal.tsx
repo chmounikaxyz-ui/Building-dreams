@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { useApp } from "@/context/app-context"
 
-interface WorkerProfile {
+export interface WorkerProfile {
   id: string | number
   name: string
   profession: string
@@ -297,6 +297,8 @@ export function WorkerProfileModal({
   const handleSendRequest = () => {
     if (!startDate) return
     addHireRequest({
+      workerId: String(worker.id),
+      explorerId: String(explorerInfo.id),
       workerName: worker.name,
       workerAvatar: worker.avatar,
       workerProfession: worker.profession,
@@ -959,4 +961,4 @@ export function WorkerProfileModal({
 }
 
 // Sample worker data for testing
-export const sampleWorkers = []
+export const sampleWorkers: WorkerProfile[] = []

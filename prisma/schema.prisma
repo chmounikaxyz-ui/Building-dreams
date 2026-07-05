@@ -39,6 +39,8 @@ model User {
   likes       Like[]
   saves       Save[]
   comments    Comment[]
+  notifications      Notification[] @relation("userNotifications")
+  sentNotifications  Notification[] @relation("senderNotifications")
 }
 
 model Follow {
@@ -150,4 +152,18 @@ model Material {
   quantity  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation("userNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  senderId       String?
+  sender         User?    @relation("senderNotifications", fields: [senderId], references: [id], onDelete: SetNull)
+  type           String   // "like" | "comment" | "follow" | "message" | "hire_request" | "hire_status" | "order" | "preorder"
+  text           String
+  read           Boolean  @default(false)
+  postId         String?
+  conversationId String?
+  createdAt      DateTime @default(now())
 }

@@ -60,6 +60,40 @@ export async function GET(
   }
 }
 
+const mockUsers: Record<string, { name: string; profession: string; avatar: string; role: string }> = {
+  "101": { name: "Amit Verma", profession: "Electrician", avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop&crop=face", role: "worker" },
+  "102": { name: "Raj Malhotra", profession: "Plumber", avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=100&h=100&fit=crop&crop=face", role: "worker" },
+  "103": { name: "Meera Joshi", profession: "Architect", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face", role: "worker" },
+  "104": { name: "Vikram Nair", profession: "Civil Engineer", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face", role: "worker" },
+  "105": { name: "Sunita Rao", profession: "Interior Designer", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face", role: "worker" },
+  "106": { name: "Deepak Sharma", profession: "Mason", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face", role: "worker" },
+  "201": { name: "Ramesh Kumar", profession: "Mason", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face", role: "worker" },
+  "202": { name: "Suresh Patel", profession: "Carpenter", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=face", role: "worker" },
+  "203": { name: "Gauresh Singh", profession: "Engineer", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face", role: "worker" },
+}
+
+async function ensureUserExists(id: string) {
+  try {
+    const exists = await prisma.user.findUnique({ where: { id } })
+    if (!exists) {
+      const mock = mockUsers[id] || { name: `User ${id}`, profession: "Explorer", avatar: "", role: "explorer" }
+      await prisma.user.create({
+        data: {
+          id,
+          email: `mock_${id}@construction.com`,
+          password: "mock-password-not-used",
+          name: mock.name,
+          role: mock.role,
+          profession: mock.profession,
+          avatar: mock.avatar,
+        }
+      })
+    }
+  } catch (err) {
+    console.error(`Error ensuring user ${id} exists:`, err)
+  }
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ conversationId: string }> }
@@ -74,6 +108,9 @@ export async function POST(
         { status: 400 }
       )
     }
+
+    // Ensure sender exists in DB (auto-create stubs for mock users)
+    await ensureUserExists(senderId)
 
     const message = await prisma.message.create({
       data: {
@@ -109,6 +146,23 @@ export async function POST(
         lastMessageTime: new Date(),
       },
     })
+
+    // Create notification for recipient
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversationId }
+    })
+    if (conv) {
+      const recipientId = conv.userId === senderId ? conv.otherUserId : conv.userId
+      await prisma.notification.create({
+        data: {
+          userId: recipientId,
+          senderId: senderId,
+          type: "message",
+          text: `New message from ${message.sender.name}: "${lastMessagePreview.substring(0, 30)}${lastMessagePreview.length > 30 ? "..." : ""}"`,
+          conversationId: conversationId
+        }
+      })
+    }
 
     return NextResponse.json(message, { status: 201 })
   } catch (error) {

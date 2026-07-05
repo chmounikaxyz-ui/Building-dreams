@@ -48,7 +48,7 @@ const getServiceFromProfession = (prof: string): string => {
 }
 
 export function EmergencyPage({ setActiveTab }: { setActiveTab?: (tab: string) => void }) {
-  const { userLocation, detectLocation, hireRequests, setHireRequests, updateHireRequest } = useApp()
+  const { userLocation, detectLocation, hireRequests, setHireRequests, updateHireRequest, addHireRequest } = useApp()
   const [selectedService, setSelectedService] = useState<string | null>(null)
   const [bookingWorker, setBookingWorker] = useState<any | null>(null)
   const [confirmed, setConfirmed] = useState(false)
@@ -190,8 +190,9 @@ export function EmergencyPage({ setActiveTab }: { setActiveTab?: (tab: string) =
     setConfirmed(true)
     setTimeout(() => {
       // Add as hire request so worker's My Jobs page receives it
-      const newRequest = {
-        id: Date.now(),
+      addHireRequest({
+        workerId: String(bookingWorker.id),
+        explorerId: String(explorerInfo.id),
         workerName: bookingWorker.name,
         workerProfession: emergencyServices.find(s => s.id === bookingWorker.service)?.label || "Emergency",
         workerAvatar: bookingWorker.avatar || "",
@@ -200,10 +201,10 @@ export function EmergencyPage({ setActiveTab }: { setActiveTab?: (tab: string) =
         explorerPhone: explorerInfo.phone || "",
         jobTitle: "Emergency Job",
         location: "Emergency",
-        status: "Pending" as const,
-        hiddenFromExplorer: false,
-      }
-      setHireRequests((prev: any[]) => [newRequest, ...prev])
+        startDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+        dailyRate: "",
+        message: "",
+      })
       setBookingWorker(null)
       setConfirmed(false)
     }, 1500)
@@ -302,36 +303,7 @@ export function EmergencyPage({ setActiveTab }: { setActiveTab?: (tab: string) =
 
   return (
     <div className="p-4 lg:p-6 space-y-6 max-w-4xl mx-auto">
-      {/* Emergency Header */}
-      <div className="rounded-3xl border border-purple-400/20 p-6 text-white" style={{background: 'oklch(0.55 0.25 290)', boxShadow: '0 20px 80px -40px rgba(109,40,217,0.4)'}}>
-        <div className="flex items-start gap-4">
-          <div className="w-14 h-14 rounded-3xl bg-white/10 border border-white/20 flex items-center justify-center shadow-lg">
-            <AlertTriangle className="w-7 h-7 text-amber-300" />
-          </div>
-          <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-300">Emergency response</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Rapid repair teams ready now</h1>
-            <p className="max-w-2xl mt-2 text-sm leading-6 text-slate-300">
-              Trusted contractors for urgent plumbing, electrical, security, and repair needs. Get a verified technician dispatched within minutes.
-            </p>
-          </div>
-        </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-white/30 bg-white/10 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-purple-200">Average response</p>
-            <p className="mt-2 text-xl font-semibold text-white">20 min</p>
-          </div>
-          <div className="rounded-2xl border border-white/30 bg-white/10 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-purple-200">Trusted network</p>
-            <p className="mt-2 text-xl font-semibold text-white">150+ technicians</p>
-          </div>
-          <div className="rounded-2xl border border-white/30 bg-white/10 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-purple-200">Coverage</p>
-            <p className="mt-2 text-xl font-semibold text-white">24/7 support</p>
-          </div>
-        </div>
-      </div>
 
       {/* Service Categories */}
       <div className="space-y-3">
@@ -340,29 +312,31 @@ export function EmergencyPage({ setActiveTab }: { setActiveTab?: (tab: string) =
             <h2 className="font-semibold text-xl text-slate-950 dark:text-white">Choose service</h2>
             <p className="text-sm text-slate-500">Select a category to filter available technicians.</p>
           </div>
-          <span className="text-sm text-slate-500">{sortedWorkers.length} technicians online</span>
+          <span className="text-sm text-slate-500">
+            {sortedWorkers.filter(w => w.available).length} technicians online
+          </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {emergencyServices.map((service) => (
             <button
               key={service.id}
               onClick={() => setSelectedService(selectedService === service.id ? null : service.id)}
               className={cn(
-                "group flex items-start gap-4 rounded-3xl border p-5 text-left transition-all duration-200",
+                "group flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-all duration-200",
                 selectedService === service.id
                   ? "border-slate-900 bg-slate-900 shadow-sm"
                   : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
               )}
             >
-              <div className={cn("mt-1 flex h-10 w-10 items-center justify-center rounded-xl border-2",
+              <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
                 selectedService === service.id ? "bg-white border-white" : "bg-white border-slate-900"
               )}>
-                <service.icon className="w-4 h-4 text-slate-900" />
+                <service.icon className="w-3.5 h-3.5 text-slate-900" />
               </div>
               <div>
-                <h3 className={cn("text-base font-semibold", selectedService === service.id ? "text-white" : "text-slate-950")}>{service.label}</h3>
-                <p className={cn("mt-1 text-sm leading-6", selectedService === service.id ? "text-slate-300" : "text-slate-500")}>{service.description}</p>
+                <h3 className={cn("text-sm font-semibold", selectedService === service.id ? "text-white" : "text-slate-950")}>{service.label}</h3>
+                <p className={cn("mt-0.5 text-xs leading-normal", selectedService === service.id ? "text-slate-300" : "text-slate-500")}>{service.description}</p>
               </div>
             </button>
           ))}
@@ -376,7 +350,9 @@ export function EmergencyPage({ setActiveTab }: { setActiveTab?: (tab: string) =
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Available team</p>
             <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Technicians nearby</h2>
           </div>
-          <span className="text-sm text-slate-500">{sortedWorkers.length} nearby</span>
+          <span className="text-sm text-slate-500">
+            {sortedWorkers.filter(w => w.available).length} available
+          </span>
         </div>
 
         <div className="space-y-3">

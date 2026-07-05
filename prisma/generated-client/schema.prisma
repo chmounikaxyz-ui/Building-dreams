@@ -1,0 +1,170 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated-client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  name        String
+  role        String   @default("explorer") // explorer | worker | seller
+  profession  String?
+  avatar      String?
+  bio         String?
+  location    String?
+  phone       String?
+  upiId       String?
+  bankAccount String?
+  bankIfsc    String?
+  lat         Float?
+  lon         Float?
+  rating      Float    @default(0)
+  verified    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posts             Post[]
+  conversations     Conversation[]
+  messages          Message[]
+  followers         Follow[]       @relation("following")
+  following         Follow[]       @relation("followers")
+  likes             Like[]
+  saves             Save[]
+  comments          Comment[]
+  notifications     Notification[] @relation("userNotifications")
+  sentNotifications Notification[] @relation("senderNotifications")
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  follower    User     @relation("followers", fields: [followerId], references: [id], onDelete: Cascade)
+  followerId  String
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  followingId String
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+}
+
+model Post {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  description String
+  images      String // JSON array of image URLs
+  tags        String // JSON array of tags
+  location    String?
+  likes       Int      @default(0)
+  comments    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userLikes    Like[]
+  userSaves    Save[]
+  postComments Comment[]
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+}
+
+model Save {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Conversation {
+  id              String    @id @default(cuid())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  otherUserId     String
+  lastMessage     String?
+  lastMessageTime DateTime?
+  updatedAt       DateTime  @updatedAt
+  messages        Message[]
+
+  @@unique([userId, otherUserId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderId       String
+  text           String
+  status         String       @default("sent") // sent, delivered, read
+  createdAt      DateTime     @default(now())
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  name      String
+  brand     String
+  price     Float
+  unit      String
+  quantity  Int
+  image     String
+  createdAt DateTime @default(now())
+}
+
+model Material {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  brand       String
+  price       Float
+  unit        String
+  image       String
+  description String?
+  inStock     Boolean  @default(true)
+  quantity    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation("userNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  senderId       String?
+  sender         User?    @relation("senderNotifications", fields: [senderId], references: [id], onDelete: SetNull)
+  type           String // "like" | "comment" | "follow" | "message" | "hire_request" | "hire_status" | "order" | "preorder"
+  text           String
+  read           Boolean  @default(false)
+  postId         String?
+  conversationId String?
+  createdAt      DateTime @default(now())
+}

@@ -195,7 +195,7 @@ export default function AuthPage() {
             ? (selectedSkills.includes("Other") ? [customSkill.trim() || "Other"] : selectedSkills)
             : undefined,
           experience: (role === "worker" || role === "seller") ? experience : undefined,
-          expectedRates: (role === "worker" || role === "seller") ? expectedRates : undefined,
+          expectedRates: role === "worker" ? expectedRates : undefined,
           workerType: role === "worker" ? workerType : undefined,
         }),
       })
@@ -625,19 +625,7 @@ export default function AuthPage() {
                       </div>
                     </div>
 
-                    {/* Expected Rates */}
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-foreground">Expected Rates</label>
-                      <div className="relative">
-                        <Banknote className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          placeholder="e.g. ₹500/day or ₹1000/ton"
-                          value={expectedRates}
-                          onChange={e => setExpectedRates(e.target.value)}
-                          className="pl-10 h-11 bg-background border-0 rounded-xl text-sm"
-                        />
-                      </div>
-                    </div>
+
 
                     {/* UPI ID */}
                     <div className="space-y-1.5">

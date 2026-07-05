@@ -284,6 +284,7 @@ export function MaterialsPage({ setActiveTab }: { setActiveTab?: (tab: string) =
   const handleSubmitPreOrder = () => {
     if (!preOrderProduct || !preOrderAddress.trim() || !preOrderPhone.trim() || !preOrderDate) return
     const buyerName = (() => { try { return JSON.parse(localStorage.getItem("auth_user") || "{}").name || "Buyer" } catch { return "Buyer" } })()
+    const buyerId = (() => { try { return JSON.parse(localStorage.getItem("auth_user") || "{}").id || "" } catch { return "" } })()
     const matchingProduct = allSellerProducts.find(p => String(p.id) === String(preOrderProduct.id)) || sellerProducts.find(p => String(p.id) === String(preOrderProduct.id))
     const sellerId = matchingProduct?.sellerId || (preOrderProduct as any).sellerId || ""
     const newPreOrderId = Date.now()
@@ -308,6 +309,7 @@ export function MaterialsPage({ setActiveTab }: { setActiveTab?: (tab: string) =
     // Push to seller's pre-order list via context
     addSellerPreOrder({
       id: newPreOrderId,
+      buyerId,
       buyerName,
       buyerPhone: preOrderPhone,
       buyerAddress: preOrderAddress,
@@ -466,6 +468,7 @@ export function MaterialsPage({ setActiveTab }: { setActiveTab?: (tab: string) =
 
   const executePlaceOrder = () => {
     const buyerName = (() => { try { return JSON.parse(localStorage.getItem("auth_user") || "{}").name || "Buyer" } catch { return "Buyer" } })()
+    const buyerId = (() => { try { return JSON.parse(localStorage.getItem("auth_user") || "{}").id || "" } catch { return "" } })()
 
     const newBuyerOrders: typeof orders = []
     cartByStore.forEach((group, groupIdx) => {
@@ -490,6 +493,7 @@ export function MaterialsPage({ setActiveTab }: { setActiveTab?: (tab: string) =
 
         addSellerOrder({
           id: orderId,
+          buyerId,
           buyerName,
           buyerPhone: delivery.phone,
           buyerLocation: delivery.address,

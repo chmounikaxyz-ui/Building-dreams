@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { useApp } from "@/context/app-context"
 
 export interface Story {
-  id: number
+  id: string | number
   name: string
   avatar: string
   profession: string
@@ -17,7 +17,7 @@ export interface Story {
   image?: string
 }
 
-const storyContent: Record<number, { image: string; caption: string }[]> = {
+const storyContent: Record<string | number, { image: string; caption: string }[]> = {
   1: [
     { image: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&h=1000&fit=crop", caption: "Foundation work in progress 💪" },
     { image: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=600&h=1000&fit=crop", caption: "Brick laying — day 3 🧱" },
@@ -46,11 +46,11 @@ const STORY_DURATION = 5000
 
 interface StoryViewerProps {
   stories: Story[]
-  initialStoryId: number
+  initialStoryId: number | string | null
   isOpen: boolean
   onClose: () => void
-  onStoryWatched: (storyId: number) => void
-  extraContent?: Record<number, { image: string; caption: string }[]>
+  onStoryWatched: (storyId: number | string) => void
+  extraContent?: Record<string | number, { image: string; caption: string }[]>
 }
 
 export function StoryViewer({ stories, initialStoryId, isOpen, onClose, onStoryWatched, extraContent = {} }: StoryViewerProps) {

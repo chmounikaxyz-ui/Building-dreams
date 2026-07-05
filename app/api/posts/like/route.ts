@@ -55,6 +55,27 @@ export async function POST(req: NextRequest) {
         data: { likes: { increment: 1 } },
       })
 
+      // Create notification for post owner
+      const post = await prisma.post.findUnique({
+        where: { id: String(postId) },
+        select: { userId: true }
+      })
+      if (post && post.userId !== userId) {
+        const likingUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true }
+        })
+        await prisma.notification.create({
+          data: {
+            userId: post.userId,
+            senderId: userId,
+            type: "like",
+            text: `${likingUser?.name || "Someone"} liked your post`,
+            postId: String(postId)
+          }
+        })
+      }
+
       return NextResponse.json({ liked: true })
     }
   } catch (error) {

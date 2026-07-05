@@ -138,3 +138,31 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const postId = searchParams.get("postId")
+
+    if (!postId) {
+      return NextResponse.json(
+        { error: "Missing required fields: postId" },
+        { status: 400 }
+      )
+    }
+
+    await prisma.post.delete({
+      where: {
+        id: postId,
+      },
+    })
+
+    return NextResponse.json({ success: true }, { status: 200 })
+  } catch (error) {
+    console.error("Delete post error:", error)
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
+  }
+}

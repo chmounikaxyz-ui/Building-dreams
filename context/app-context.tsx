@@ -42,7 +42,7 @@ export interface PostComment {
 export interface Post {
   id: string | number
   user: {
-    id(id: any): unknown
+    id: string | number
     name: string
     profession: string
     avatar: string
@@ -50,6 +50,11 @@ export interface Post {
     location: string
     rating: number
     isFollowing: boolean
+    bio?: string | null
+    upiId?: string | null
+    bankAccount?: string | null
+    bankIfsc?: string | null
+    role?: string | null
   }
   images: string[]
   likes: number
@@ -107,6 +112,7 @@ export interface SellerProduct {
 export interface SellerOrder {
   id: number
   date: string
+  buyerId?: string
   buyerName: string
   buyerPhone?: string
   buyerLocation?: string
@@ -124,6 +130,7 @@ export interface SellerOrder {
 export interface SellerPreOrder {
   id: number
   date: string
+  buyerId?: string
   buyerName: string
   buyerPhone: string
   buyerAddress: string
@@ -141,9 +148,11 @@ export interface SellerPreOrder {
 export interface HireRequest {
   id: number
   date: string
+  workerId?: string
   workerName: string
   workerAvatar: string
   workerProfession: string
+  explorerId?: string
   explorerName: string
   explorerAvatar: string
   explorerPhone: string
@@ -167,13 +176,13 @@ interface AppContextType {
   getConversationMessages: (conversationId: number) => Message[]
   // Posts
   posts: Post[]
-  toggleLikePost: (postId: number) => void
-  toggleSavePost: (postId: number) => void
-  toggleFollowPost: (postId: number) => void
+  toggleLikePost: (postId: string | number) => void
+  toggleSavePost: (postId: string | number) => void
+  toggleFollowPost: (postId: string | number) => void
   addComment: (postId: string | number, text: string) => void
   deleteComment: (postId: string | number, commentId: string | number) => Promise<void>
   addPost: (image: string, description: string, tags: string[], location: string) => void
-  deletePost: (postId: number) => void
+  deletePost: (postId: string | number) => Promise<void>
   reloadPosts: () => Promise<void>
   // Cart
   cartItems: CartItem[]
@@ -552,6 +561,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (uid === sellerId) {
           setSellerOrdersState(updated)
         }
+
+        // Trigger notification
+        if (sellerId && order.buyerId) {
+          fetch("/api/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: sellerId,
+              senderId: order.buyerId,
+              type: "order",
+              text: `New order from ${order.buyerName} for ${order.productName}`
+            })
+          }).catch(err => console.error("Failed to create order notification:", err))
+        }
       } catch (err) {
         console.error("Failed to add seller order to localStorage:", err)
       }
@@ -568,29 +591,112 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateSellerOrderStatus = (id: number, status: SellerOrder["status"]) => {
     const uid = getCurrentUserId()
     const key = uid ? `orders_${uid}` : null
+    let targetOrder: SellerOrder | undefined
+
     if (key) {
       try {
         const latest: SellerOrder[] = JSON.parse(localStorage.getItem(key) || "[]")
-        const updated = latest.map(o => String(o.id) === String(id) ? { ...o, status } : o)
+        const updated = latest.map(o => {
+          if (String(o.id) === String(id)) {
+            const ord = { ...o, status }
+            targetOrder = ord
+            return ord
+          }
+          return o
+        })
         localStorage.setItem(key, JSON.stringify(updated))
         setSellerOrdersState(updated)
-        return
       } catch { }
+    } else {
+      setSellerOrders(prev => prev.map(o => {
+        if (String(o.id) === String(id)) {
+          const ord = { ...o, status }
+          targetOrder = ord
+          return ord
+        }
+        return o
+      }))
     }
-    setSellerOrders(prev => prev.map(o => String(o.id) === String(id) ? { ...o, status } : o))
+
+    // Trigger notification to buyer
+    if (targetOrder && targetOrder.buyerId && uid) {
+      const text = `Your order for "${targetOrder.productName}" has been ${status.toLowerCase()}`
+      fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: targetOrder.buyerId,
+          senderId: uid,
+          type: "order",
+          text
+        })
+      }).catch(err => console.error("Failed to create order status update notification:", err))
+    }
   }
 
   const addHireRequest = (req: Omit<HireRequest, "id" | "date" | "status">) => {
-    setHireRequests(prev => [{
+    const newReq = {
       ...req,
       id: Date.now(),
       date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
       status: "Pending" as const,
-    }, ...prev])
+    }
+    setHireRequests(prev => [newReq, ...prev])
+
+    // Create notification in database
+    if (req.workerId && req.explorerId) {
+      console.log(`[Notifications Debug] addHireRequest: Posting notification to worker: ${req.workerId} from: ${req.explorerId}`);
+      fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: req.workerId,
+          senderId: req.explorerId,
+          type: "hire_request",
+          text: `${req.explorerName} requested to hire you for "${req.workerProfession}"`
+        })
+      })
+      .then(res => {
+        console.log(`[Notifications Debug] addHireRequest POST status: ${res.status}`);
+        if (!res.ok) res.text().then(t => console.error(`[Notifications Debug] addHireRequest POST error detail: ${t}`));
+      })
+      .catch(err => console.error("[Notifications Debug] addHireRequest POST failed:", err))
+    } else {
+      console.log("[Notifications Debug] addHireRequest: Bypassing notification - missing workerId or explorerId", { workerId: req.workerId, explorerId: req.explorerId });
+    }
   }
 
   const updateHireRequest = (id: number, status: HireRequest["status"]) => {
-    setHireRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r))
+    setHireRequests(prev => {
+      const updated = prev.map(r => r.id === id ? { ...r, status } : r)
+      const found = prev.find(r => r.id === id)
+      if (found && found.explorerId && found.workerId && (status === "Accepted" || status === "Rejected")) {
+        console.log(`[Notifications Debug] updateHireRequest: Posting accept/reject notification to explorer: ${found.explorerId} from worker: ${found.workerId}`);
+        fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: found.explorerId,
+            senderId: found.workerId,
+            type: "hire_status",
+            text: `${found.workerName} ${status.toLowerCase()} your hire request`
+          })
+        })
+        .then(res => {
+          console.log(`[Notifications Debug] updateHireRequest POST status: ${res.status}`);
+          if (!res.ok) res.text().then(t => console.error(`[Notifications Debug] updateHireRequest POST error detail: ${t}`));
+        })
+        .catch(err => console.error("[Notifications Debug] updateHireRequest POST failed:", err))
+      } else {
+        console.log("[Notifications Debug] updateHireRequest: Bypassing notification - missing properties", {
+          foundExists: !!found,
+          explorerId: found?.explorerId,
+          workerId: found?.workerId,
+          status
+        });
+      }
+      return updated
+    })
   }
 
   const [sellerPreOrders, setSellerPreOrdersState] = useState<SellerPreOrder[]>(() => {
@@ -665,6 +771,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (uid === sellerId) {
           setSellerPreOrdersState(updated)
         }
+
+        // Trigger notification
+        if (sellerId && req.buyerId) {
+          fetch("/api/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: sellerId,
+              senderId: req.buyerId,
+              type: "preorder",
+              text: `New pre-order from ${req.buyerName} for ${req.productName}`
+            })
+          }).catch(err => console.error("Failed to create preorder notification:", err))
+        }
       } catch (err) {
         console.error("Failed to add seller pre-order to localStorage:", err)
       }
@@ -679,16 +799,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateSellerPreOrderStatus = (id: number, status: SellerPreOrder["status"]) => {
     const uid = getCurrentUserId()
     const key = uid ? `preorders_${uid}` : null
+    let targetPreOrder: SellerPreOrder | undefined
+
     if (key) {
       try {
         const latest: SellerPreOrder[] = JSON.parse(localStorage.getItem(key) || "[]")
-        const updated = latest.map(r => String(r.id) === String(id) ? { ...r, status } : r)
+        const updated = latest.map(r => {
+          if (String(r.id) === String(id)) {
+            const po = { ...r, status }
+            targetPreOrder = po
+            return po
+          }
+          return r
+        })
         localStorage.setItem(key, JSON.stringify(updated))
         setSellerPreOrdersState(updated)
-        return
       } catch { }
+    } else {
+      setSellerPreOrders(prev => prev.map(r => {
+        if (String(r.id) === String(id)) {
+          const po = { ...r, status }
+          targetPreOrder = po
+          return po
+        }
+        return r
+      }))
     }
-    setSellerPreOrders(prev => prev.map(r => String(r.id) === String(id) ? { ...r, status } : r))
+
+    // Trigger notification to buyer
+    if (targetPreOrder && targetPreOrder.buyerId && uid) {
+      const text = status === "Ready" 
+        ? `Your pre-order for "${targetPreOrder.productName}" is ready!`
+        : `Your pre-order for "${targetPreOrder.productName}" has been ${status.toLowerCase()}`
+      fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: targetPreOrder.buyerId,
+          senderId: uid,
+          type: "preorder",
+          text
+        })
+      }).catch(err => console.error("Failed to create pre-order status update notification:", err))
+    }
   }
 
   const detectLocation = async () => {
@@ -918,6 +1071,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ followerId: currentUser.id, followingId: String(id) }),
         })
+
+        // Notify the followed user (only on follow, not unfollow)
+        if (!isFollowing) {
+          fetch("/api/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: String(id),
+              senderId: String(currentUser.id),
+              type: "follow",
+              text: `${currentUser.name || "Someone"} started following you`,
+            })
+          }).catch(err => console.error("Failed to send follow notification:", err))
+        }
       }
     } catch (err) {
       console.error("Failed to sync follow state to DB:", err)
@@ -975,7 +1142,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Posts ──────────────────────────────────────────────────────────────────
 
-  const toggleLikePost = async (postId: number) => {
+  const toggleLikePost = async (postId: string | number) => {
     try {
       const user = JSON.parse(localStorage.getItem("auth_user") || "{}")
       const response = await fetch("/api/posts/like", {
@@ -984,11 +1151,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ postId, userId: user.id }),
       })
       if (response.ok) {
-        setPosts(prev => prev.map(p =>
-          p.id === postId
-            ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
-            : p
-        ))
+        setPosts(prev => {
+          const updated = prev.map(p =>
+            p.id === postId
+              ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+              : p
+          )
+          // Send notification to post owner when liking (not unliking)
+          const post = prev.find(p => p.id === postId)
+          const postOwnerId = post ? String((post.user as any).id || "") : ""
+          const wasLiked = post?.isLiked
+          if (!wasLiked && user.id && postOwnerId && postOwnerId !== String(user.id)) {
+            fetch("/api/notifications", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: postOwnerId,
+                senderId: String(user.id),
+                type: "like",
+                text: `${user.name || "Someone"} liked your post`,
+                postId: String(postId),
+              })
+            }).catch(err => console.error("Failed to send like notification:", err))
+          }
+          return updated
+        })
       }
     } catch (error) {
       console.error("Error toggling like:", error)
@@ -1001,7 +1188,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const toggleSavePost = async (postId: number) => {
+  const toggleSavePost = async (postId: string | number) => {
     try {
       const user = JSON.parse(localStorage.getItem("auth_user") || "{}")
       const response = await fetch("/api/posts/save", {
@@ -1019,7 +1206,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const toggleFollowPost = (postId: number) => {
+  const toggleFollowPost = (postId: string | number) => {
     setPosts(prev => prev.map(p =>
       p.id === postId
         ? { ...p, user: { ...p.user, isFollowing: !p.user.isFollowing } }
@@ -1028,6 +1215,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   const addComment = async (postId: string | number, text: string) => {
+    const currentUser = (() => { try { return JSON.parse(localStorage.getItem("auth_user") || "{}") } catch { return {} } })()
     try {
       const stored = localStorage.getItem("auth_user")
       if (stored) {
@@ -1040,17 +1228,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
           })
           if (res.ok) {
             const newComment = await res.json()
-            setPosts(prev => prev.map(p => {
-              if (p.id === postId) {
-                const existingList = p.commentsList || []
-                return {
-                  ...p,
-                  comments: p.comments + 1,
-                  commentsList: [...existingList, newComment]
+            setPosts(prev => {
+              const updated = prev.map(p => {
+                if (p.id === postId) {
+                  const existingList = p.commentsList || []
+                  return {
+                    ...p,
+                    comments: p.comments + 1,
+                    commentsList: [...existingList, newComment]
+                  }
                 }
+                return p
+              })
+              // Notify post owner
+              const post = prev.find(p => p.id === postId)
+              const postOwnerId = post ? String((post.user as any).id || "") : ""
+              if (postOwnerId && postOwnerId !== String(u.id)) {
+                fetch("/api/notifications", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId: postOwnerId,
+                    senderId: String(u.id),
+                    type: "comment",
+                    text: `${u.name || "Someone"} commented: "${text.length > 50 ? text.slice(0, 50) + "…" : text}"`,
+                    postId: String(postId),
+                  })
+                }).catch(err => console.error("Failed to send comment notification:", err))
               }
-              return p
-            }))
+              return updated
+            })
             return
           }
         }
@@ -1065,7 +1272,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const existingList = p.commentsList || []
         const newLocalComment = {
           id: Date.now(),
-          userName: "You",
+          userName: currentUser.name || "You",
           userAvatar: "",
           text,
           createdAt: new Date().toISOString()
@@ -1157,8 +1364,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const deletePost = (postId: number) => {
+  const deletePost = async (postId: string | number) => {
     setPosts(prev => prev.filter(p => p.id !== postId))
+    try {
+      const response = await fetch(`/api/posts?postId=${postId}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        console.error("Failed to delete post from database:", await response.text())
+      }
+    } catch (error) {
+      console.error("Error deleting post:", error)
+    }
   }
 
   // ── Cart ────────────────────────────────────────────────────────────────────

@@ -35,6 +35,23 @@ export async function POST(req: NextRequest) {
       }
     })
 
+    // Create notification for post owner
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { userId: true }
+    })
+    if (post && post.userId !== userId) {
+      await prisma.notification.create({
+        data: {
+          userId: post.userId,
+          senderId: userId,
+          type: "comment",
+          text: `${comment.user.name} commented on your post: "${text.substring(0, 30)}${text.length > 30 ? "..." : ""}"`,
+          postId: postId
+        }
+      })
+    }
+
     return NextResponse.json({
       id: comment.id,
       userName: comment.user.name,

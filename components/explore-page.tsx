@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, MapPin, Star, BadgeCheck, Sliders, UserCheck, Clock, ClipboardCheck, Calendar, Briefcase, ShoppingBag, Trash2 } from "lucide-react"
+import { Search, MapPin, Star, BadgeCheck, Sliders, UserCheck, Clock, ClipboardCheck, Calendar, Briefcase, ShoppingBag, Trash2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -482,132 +482,160 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
 
       {/* Filter Panel */}
       {showFilters && (
-        <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-card-foreground">Filters</h3>
+        <div className="bg-card border border-border rounded-2xl p-6 space-y-5 shadow-sm">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-border/60 pb-3">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-primary" />
+              <h3 className="font-bold text-sm text-card-foreground">Search & Filter Preferences</h3>
+            </div>
             <button
               onClick={() => { setFilterAvailable(false); setFilterVerified(false); setFilterMinRating(0); setFilterMaxKm(0) }}
-              className="text-xs text-primary hover:underline"
+              className="text-xs font-semibold text-primary hover:text-primary/80 transition-all flex items-center gap-1"
             >
-              Clear all
+              <Trash2 className="w-3 h-3" /> Clear all
             </button>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setFilterAvailable(v => !v)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors",
-                filterAvailable ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border text-secondary-foreground"
-              )}
-            >
-              ✅ Available Now
-            </button>
-            {[4, 4.5, 4.8].map(r => (
-              <button
-                key={r}
-                onClick={() => setFilterMinRating(filterMinRating === r ? 0 : r)}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition-colors",
-                  filterMinRating === r ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border text-secondary-foreground"
-                )}
-              >
-                ★ {r}+
-              </button>
-            ))}
-          </div>
 
-          {/* Distance radius filter */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-card-foreground flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-primary" />
-                {filterMaxKm === 0 ? "Any distance" : `Within ${filterMaxKm} km`}
-              </p>
-              {filterMaxKm > 0 && (
-                <button onClick={() => setFilterMaxKm(0)} className="text-xs text-primary hover:underline">Clear</button>
-              )}
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {[2, 5, 10, 20, 50].map(km => (
-                <button
-                  key={km}
-                  onClick={() => setFilterMaxKm(filterMaxKm === km ? 0 : km)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
-                    filterMaxKm === km ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border text-secondary-foreground"
-                  )}
-                >
-                  {km} km
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left Column: Preferences */}
+            <div className="space-y-4">
+              {/* Availability & Rating */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">Status & Ratings</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setFilterAvailable(v => !v)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all duration-200",
+                      filterAvailable 
+                        ? "bg-primary/10 text-primary border-primary shadow-sm" 
+                        : "bg-secondary/40 border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+                    )}
+                  >
+                    <span className={cn("w-2 h-2 rounded-full", filterAvailable ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/60")} />
+                    Available Now
+                  </button>
 
-            {/* Manual Location Search Input */}
-            <div className="space-y-2 pt-2 border-t border-border">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-card-foreground">
-                  {exploreLocation?.city ? (
-                    <>Explore: <span className="text-primary font-bold">{exploreLocation.city}</span></>
-                  ) : userLocation?.city ? (
-                    <>Home: <span className="text-emerald-600 font-bold dark:text-emerald-400">{userLocation.city}</span></>
-                  ) : (
-                    "No active location"
-                  )}
-                </span>
-                {exploreLocation ? (
-                  <button 
-                    onClick={() => {
-                      setExploreLocation(null)
-                      setLocationError(null)
-                    }}
-                    className="text-[10px] text-primary underline hover:text-primary/80 font-medium"
-                  >
-                    Use Home Location
-                  </button>
-                ) : userLocation?.city ? (
-                  <button 
-                    onClick={() => {
-                      detectLocation()
-                      setLocationError(null)
-                    }}
-                    className="text-[10px] text-primary underline hover:text-primary/80 font-medium"
-                  >
-                    Use GPS
-                  </button>
-                ) : null}
-              </div>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                  <Input
-                    placeholder="Search city or area (e.g. Mumbai)"
-                    value={manualLocationInput}
-                    onChange={(e) => {
-                      setManualLocationInput(e.target.value)
-                      if (locationError) setLocationError(null)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        handleManualLocationSearch()
-                      }
-                    }}
-                    className="pl-9 h-8 text-xs rounded-lg bg-secondary border-0"
-                  />
+                  {[4, 4.5, 4.8].map(r => (
+                    <button
+                      key={r}
+                      onClick={() => setFilterMinRating(filterMinRating === r ? 0 : r)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all duration-200",
+                        filterMinRating === r 
+                          ? "bg-primary/10 text-primary border-primary shadow-sm" 
+                          : "bg-secondary/40 border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+                      )}
+                    >
+                      <Star className={cn("w-3 h-3", filterMinRating === r ? "text-primary fill-primary" : "text-muted-foreground")} />
+                      {r}+ Rating
+                    </button>
+                  ))}
                 </div>
-                <Button
-                  onClick={handleManualLocationSearch}
-                  disabled={searchingLocation}
-                  className="h-8 px-3 rounded-lg text-xs"
-                >
-                  {searchingLocation ? "..." : "Set"}
-                </Button>
               </div>
-              {locationError && (
-                <p className="text-[10px] text-red-500 font-medium mt-1 flex items-center gap-1">
-                  ⚠️ {locationError}
-                </p>
-              )}
+
+              {/* Distance Radius */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">Distance Radius</label>
+                  <span className="text-xs font-bold text-primary">
+                    {filterMaxKm === 0 ? "Any distance" : `Within ${filterMaxKm} km`}
+                  </span>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {[2, 5, 10, 20, 50].map(km => (
+                    <button
+                      key={km}
+                      onClick={() => setFilterMaxKm(filterMaxKm === km ? 0 : km)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-200",
+                        filterMaxKm === km 
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm" 
+                          : "bg-secondary/40 border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+                      )}
+                    >
+                      {km} km
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Location search */}
+            <div className="space-y-4 md:border-l md:border-border/60 md:pl-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">Location Search</label>
+                  <span className="text-xs font-bold text-card-foreground">
+                    {exploreLocation?.city ? (
+                      <span className="text-primary font-bold">Exploring: {exploreLocation.city}</span>
+                    ) : userLocation?.city ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">Home: {userLocation.city}</span>
+                    ) : (
+                      "No active location"
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search city or area (e.g. Mumbai)"
+                      value={manualLocationInput}
+                      onChange={(e) => {
+                        setManualLocationInput(e.target.value)
+                        if (locationError) setLocationError(null)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          handleManualLocationSearch()
+                        }
+                      }}
+                      className="pl-9 h-11 text-xs rounded-xl bg-secondary/30 border-border focus-visible:ring-primary font-medium"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleManualLocationSearch}
+                    disabled={searchingLocation}
+                    className="h-11 px-4 rounded-xl text-xs font-bold shadow-md shadow-primary/10"
+                  >
+                    {searchingLocation ? "..." : "Set"}
+                  </Button>
+                </div>
+
+                <div className="flex justify-between items-center pt-1">
+                  {exploreLocation ? (
+                    <button 
+                      onClick={() => {
+                        setExploreLocation(null)
+                        setLocationError(null)
+                      }}
+                      className="text-[10px] text-primary hover:text-primary/80 font-bold flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Reset to Home Location
+                    </button>
+                  ) : userLocation?.city ? (
+                    <button 
+                      onClick={() => {
+                        detectLocation()
+                        setLocationError(null)
+                      }}
+                      className="text-[10px] text-primary hover:text-primary/80 font-bold flex items-center gap-1"
+                    >
+                      <MapPin className="w-3 h-3" /> Detect via GPS
+                    </button>
+                  ) : null}
+                </div>
+
+                {locationError && (
+                  <p className="text-[10px] text-red-500 font-semibold mt-1 flex items-center gap-1">
+                    ⚠️ {locationError}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -859,10 +859,27 @@ export function MessagesPage() {
       })
       await loadMessages(selectedDbConv.id)
       await loadConversations()
+
+      // Notify recipient
+      if (currentUserId && selectedDbConv.otherUserId) {
+        const senderName = currentUser.name || "Someone"
+        fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: selectedDbConv.otherUserId,
+            senderId: currentUserId,
+            type: "message",
+            text: `${senderName}: ${text.length > 60 ? text.slice(0, 60) + "…" : text}`,
+            conversationId: selectedDbConv.id,
+          })
+        }).catch(err => console.error("Failed to send message notification:", err))
+      }
     } catch (err) {
       console.error("Send message error:", err)
     }
   }
+
 
   const formatDuration = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`

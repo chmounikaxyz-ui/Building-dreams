@@ -86,7 +86,7 @@ function OwnStoryViewer({ stories, onClose, onAddMore, onDelete, userAvatar }: {
     if (progressRef.current) clearInterval(progressRef.current)
   }
 
-  const goNext = useRef(() => {})
+  const goNext = useRef(() => { })
   goNext.current = () => {
     if (idx < stories.length - 1) {
       setIdx(i => i + 1)
@@ -220,16 +220,16 @@ function OwnStoryViewer({ stories, onClose, onAddMore, onDelete, userAvatar }: {
 
 export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => void }) {
   const { posts, toggleLikePost, toggleSavePost, addComment, userStories, addUserStory, deleteUserStory, userStoryWatched, setUserStoryWatched, setSelectedConversation, setConversations, conversations, followingIds, toggleFollow, userAvatar } = useApp()
-  const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null)
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | number | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showPostOnOpen, setShowPostOnOpen] = useState(false)
   const [localAvatar, setLocalAvatar] = useState("")
-  
+
   // Sync local avatar when context avatar changes
   useEffect(() => {
     setLocalAvatar(userAvatar)
   }, [userAvatar])
-  
+
   // Also sync from localStorage on mount, when storage changes, and on auth-change (login/logout)
   useEffect(() => {
     const syncFromStorage = () => {
@@ -242,11 +242,11 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
           // Logged out — clear avatar
           setLocalAvatar("")
         }
-      } catch {}
+      } catch { }
     }
-    
+
     syncFromStorage()
-    
+
     // Listen for auth-change events (login/logout/switch accounts)
     window.addEventListener("auth-change", syncFromStorage)
     // Also listen for storage events (cross-tab sync)
@@ -256,7 +256,7 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
       window.removeEventListener('storage', syncFromStorage)
     }
   }, [])
-  
+
   // Get current user name and avatar for story display - reactive to changes
   const getCurrentUserData = () => {
     try {
@@ -268,12 +268,12 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
           avatar: user.avatar || ""
         }
       }
-    } catch {}
+    } catch { }
     return { name: "Your Story", avatar: "" }
   }
-  
+
   const userData = getCurrentUserData()
-  
+
   // Build user story with dynamic avatar - prioritize local state, then context, then localStorage
   const userStoryData: Story = {
     id: 0,
@@ -283,12 +283,12 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
     hasUnseenStory: false,
     isOwn: true
   }
-  
+
   const [commentTexts, setCommentTexts] = useState<{ [postId: string | number]: string }>({})
   const [openCommentPostId, setOpenCommentPostId] = useState<string | number | null>(null)
-  const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null)
+  const [selectedStoryId, setSelectedStoryId] = useState<string | number | null>(null)
   const [isStoryViewerOpen, setIsStoryViewerOpen] = useState(false)
-  const [watchedStoryIds, setWatchedStoryIds] = useState<number[]>([])
+  const [watchedStoryIds, setWatchedStoryIds] = useState<(string | number)[]>([])
   const [isAddStoryOpen, setIsAddStoryOpen] = useState(false)
   const [sharePostId, setSharePostId] = useState<string | number | null>(null)
   const [shareSearch, setShareSearch] = useState("")
@@ -319,11 +319,11 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
     setIsStoryViewerOpen(true)
   }
 
-  const handleStoryWatched = (storyId: number) => {
+  const handleStoryWatched = (storyId: string | number) => {
     setWatchedStoryIds(prev => prev.includes(storyId) ? prev : [...prev, storyId])
   }
 
-  const openProfile = (postId: number, showPost: boolean = false) => {
+  const openProfile = (postId: string | number, showPost: boolean = false) => {
     setShowPostOnOpen(showPost)
     setSelectedWorkerId(postId)
     setIsModalOpen(true)
@@ -421,7 +421,7 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
     }
   }
 
-  const handleComment = (postId: number) => {
+  const handleComment = (postId: string | number) => {
     const text = commentTexts[postId] || ""
     if (text.trim()) {
       addComment(postId, text)
@@ -430,7 +430,7 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
     }
   }
 
-  const toggleCommentBox = (postId: number) => {
+  const toggleCommentBox = (postId: string | number) => {
     setOpenCommentPostId(prev => prev === postId ? null : postId)
   }
 
@@ -457,7 +457,7 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
           parsedWorkerType = p.workerType || "normal"
           parsedCoverImage = p.coverImage || ""
         }
-      } catch {}
+      } catch { }
     }
 
     return {
@@ -490,10 +490,10 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
     : {}
 
   return (
-    <div className="min-h-full max-w-xl mx-auto px-4 py-6 space-y-6">
+    <div className="min-h-full max-w-2xl mx-auto px-4 py-4 space-y-4">
       {/* Stories Section */}
-      <div className="bg-card rounded-2xl border border-border p-4">
-        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+      <div className="bg-card rounded-2xl border border-border p-3">
+        <div className="flex gap-3.5 overflow-x-auto pb-1 scrollbar-hide">
           {sortedStories.map((story) => (
             <button
               key={story.id}
@@ -510,7 +510,7 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
                   setIsStoryViewerOpen(true)
                 }
               }}
-              className="flex flex-col items-center gap-1.5 min-w-[70px]"
+              className="flex flex-col items-center gap-1 min-w-[70px]"
             >
               <div className={cn(
                 "relative w-16 h-16 rounded-full p-[3px]",
@@ -519,8 +519,8 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
                     ? "bg-gradient-to-tr from-purple-600 via-violet-500 to-fuchsia-400"
                     : "bg-border"
                   : story.hasUnseenStory && !watchedStoryIds.includes(story.id)
-                  ? "bg-gradient-to-tr from-purple-600 via-violet-500 to-fuchsia-400"
-                  : "bg-border"
+                    ? "bg-gradient-to-tr from-purple-600 via-violet-500 to-fuchsia-400"
+                    : "bg-border"
               )}>
                 <div className="w-full h-full rounded-full bg-card p-[2px]">
                   <Avatar className="w-full h-full">
@@ -561,7 +561,7 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
         return (
           <article key={post.id} className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
             {/* Post Header */}
-            <div className="flex items-center justify-between p-4">
+            <div className="flex items-center justify-between p-3">
               <div className="flex items-center gap-3">
                 {/* Avatar — opens story viewer if active, else profile */}
                 <button
@@ -596,116 +596,117 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
                   </div>
                 </button>
 
-              {/* Name — opens full profile modal */}
-              <button className="text-left" onClick={() => openProfile(post.id)}>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-card-foreground hover:underline">{post.user.name}</span>
-                  {post.user.verified && (
-                    <BadgeCheck className="w-4 h-4 text-primary fill-primary/20" />
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{post.user.profession}</span>
-                </div>
-              </button>
-            </div>
-            {(() => {
-              try {
-                const me = JSON.parse(localStorage.getItem("auth_user") || "{}")
-                return post.user.name !== me.name
-              } catch { return true }
-            })() && (
-              <Button
-                size="sm"
-                variant={followingIds.includes(post.user.id) ? "secondary" : "outline"}
-                className="rounded-full h-8 px-4 ml-2"
-                onClick={() => toggleFollow(post.user.id, post.user.name, post.user.profession, post.user.avatar)}
-              >
-                {followingIds.includes(post.user.id) ? "Following" : "Follow"}
-              </Button>
-            )}
-          </div>
-
-          {/* Post Image */}
-          <div className="relative aspect-square bg-muted">
-            <img
-              src={post.images[0]}
-              alt={post.description}
-              onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&h=600&fit=crop" }}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white text-xs px-2.5 py-1.5 rounded-full">
-              <MapPin className="w-3 h-3" />
-              <span>{post.user.location}</span>
-            </div>
-          </div>
-
-          {/* Post Actions */}
-          <div className="p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => toggleLikePost(post.id)}>
-                  <Heart className={cn("w-5 h-5 transition-all", post.isLiked && "fill-primary text-primary scale-110")} />
-                </Button>
-                <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => toggleCommentBox(post.id)}>
-                  <MessageCircle className="w-5 h-5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => { setSharePostId(post.id); setSharedTo([]); setShareSearch("") }}>
-                  <Share2 className="w-5 h-5" />
-                </Button>
+                {/* Name — opens full profile modal */}
+                <button className="text-left" onClick={() => openProfile(post.id)}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-card-foreground hover:underline">{post.user.name}</span>
+                    {post.user.verified && (
+                      <BadgeCheck className="w-4 h-4 text-primary fill-primary/20" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{post.user.profession}</span>
+                  </div>
+                </button>
               </div>
-              <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => toggleSavePost(post.id)}>
-                <Bookmark className={cn("w-5 h-5 transition-all", post.isSaved && "fill-primary text-primary")} />
-              </Button>
+              {(() => {
+                try {
+                  const me = JSON.parse(localStorage.getItem("auth_user") || "{}")
+                  return post.user.name !== me.name
+                } catch { return true }
+              })() && (
+                  <Button
+                    size="sm"
+                    variant={followingIds.includes(post.user.id) ? "secondary" : "outline"}
+                    className="rounded-full h-8 px-4 ml-2"
+                    onClick={() => toggleFollow(post.user.id, post.user.name, post.user.profession, post.user.avatar)}
+                  >
+                    {followingIds.includes(post.user.id) ? "Following" : "Follow"}
+                  </Button>
+                )}
             </div>
 
-            <div className="space-y-2">
-              <p className="font-semibold text-sm text-card-foreground">{post.likes.toLocaleString()} likes</p>
-              <p className="text-sm text-card-foreground">
-                <span className="font-semibold">{post.user.name}</span>{" "}{post.description}
-              </p>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {post.tags.map((tag) => (
-                  <span key={tag} className="text-xs text-primary font-medium">#{tag}</span>
-                ))}
+            {/* Post Image */}
+            <div className="relative aspect-square bg-muted">
+              <img
+                src={post.images[0]}
+                alt={post.description}
+                onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&h=600&fit=crop" }}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white text-xs px-2.5 py-1.5 rounded-full">
+                <MapPin className="w-3 h-3" />
+                <span>{post.user.location}</span>
               </div>
-              <button 
-                className="text-xs text-muted-foreground hover:underline"
-                onClick={() => openProfile(post.id, true)}
-              >
-                View all {post.comments} comments
-              </button>
-              <p className="text-xs text-muted-foreground">{getRelativeTimeString(post.timestamp)}</p>
             </div>
 
-            {openCommentPostId === post.id && (
-              <div className="flex gap-2 pt-2 border-t border-border">
-                <Avatar className="w-7 h-7">
-                  {userAvatar ? (
-                    <AvatarImage src={userAvatar} />
-                  ) : null}
-                  <AvatarFallback className="bg-primary text-primary-foreground font-semibold flex items-center justify-center w-full h-full text-[10px]">
-                    {userData.name?.[0]?.toUpperCase() || "M"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 flex gap-2">
-                  <Input
-                    placeholder="Add a comment..."
-                    value={commentTexts[post.id] || ""}
-                    onChange={(e) => setCommentTexts(prev => ({ ...prev, [post.id]: e.target.value }))}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleComment(post.id) }}
-                    className="h-8 text-sm bg-muted border-0"
-                    autoFocus
-                  />
-                  <Button size="sm" variant="ghost" onClick={() => handleComment(post.id)} disabled={!(commentTexts[post.id] || "").trim()} className="h-8 px-3">
-                    Post
+            {/* Post Actions */}
+            <div className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => toggleLikePost(post.id)}>
+                    <Heart className={cn("w-5 h-5 transition-all", post.isLiked && "fill-primary text-primary scale-110")} />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => toggleCommentBox(post.id)}>
+                    <MessageCircle className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => { setSharePostId(post.id); setSharedTo([]); setShareSearch("") }}>
+                    <Share2 className="w-5 h-5" />
                   </Button>
                 </div>
+                <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => toggleSavePost(post.id)}>
+                  <Bookmark className={cn("w-5 h-5 transition-all", post.isSaved && "fill-primary text-primary")} />
+                </Button>
               </div>
-            )}
-          </div>
-        </article>
-      )})}
+
+              <div className="space-y-2">
+                <p className="font-semibold text-sm text-card-foreground">{post.likes.toLocaleString()} likes</p>
+                <p className="text-sm text-card-foreground">
+                  <span className="font-semibold">{post.user.name}</span>{" "}{post.description}
+                </p>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {post.tags.map((tag) => (
+                    <span key={tag} className="text-xs text-primary font-medium">#{tag}</span>
+                  ))}
+                </div>
+                <button
+                  className="text-xs text-muted-foreground hover:underline"
+                  onClick={() => openProfile(post.id, true)}
+                >
+                  View all {post.comments} comments
+                </button>
+                <p className="text-xs text-muted-foreground">{getRelativeTimeString(post.timestamp)}</p>
+              </div>
+
+              {openCommentPostId === post.id && (
+                <div className="flex gap-2 pt-2 border-t border-border">
+                  <Avatar className="w-7 h-7">
+                    {userAvatar ? (
+                      <AvatarImage src={userAvatar} />
+                    ) : null}
+                    <AvatarFallback className="bg-primary text-primary-foreground font-semibold flex items-center justify-center w-full h-full text-[10px]">
+                      {userData.name?.[0]?.toUpperCase() || "M"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 flex gap-2">
+                    <Input
+                      placeholder="Add a comment..."
+                      value={commentTexts[post.id] || ""}
+                      onChange={(e) => setCommentTexts(prev => ({ ...prev, [post.id]: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleComment(post.id) }}
+                      className="h-8 text-sm bg-muted border-0"
+                      autoFocus
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => handleComment(post.id)} disabled={!(commentTexts[post.id] || "").trim()} className="h-8 px-3">
+                      Post
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </article>
+        )
+      })}
 
       {/* Worker Profile Modal */}
       <WorkerProfileModal
@@ -720,7 +721,7 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
       <StoryViewer
         stories={dynamicStory ? [...storiesData, dynamicStory] : storiesData}
         initialStoryId={selectedStoryId ?? 1}
-        isOpen={isStoryViewerOpen && selectedStoryId !== null && selectedStoryId > 0}
+        isOpen={isStoryViewerOpen && selectedStoryId !== null && selectedStoryId !== -1}
         onClose={() => { setIsStoryViewerOpen(false); setSelectedStoryId(null); setDynamicStory(null) }}
         onStoryWatched={handleStoryWatched}
         extraContent={extraStoryContent}
