@@ -94,5 +94,12 @@
   "allowScripts": {
     "prisma@5.22.0": true,
     "sharp@0.34.5": true
-  }
+  },
+  "onlyBuiltDependencies": [
+    "@prisma/client",
+    "@prisma/engines",
+    "esbuild",
+    "prisma",
+    "sharp"
+  ]
 }
