@@ -15,14 +15,6 @@ let convIdCounter = 1000
 
 function newConvId() { return ++convIdCounter }
 
-const allProfessionals = [
-  { id: 101, name: "Amit Verma", profession: "Electrician", avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop&crop=face", rating: 4.8, verified: true, location: "2.3 km away", experience: "8 Years Exp", bio: "Expert electrician for residential and commercial projects.", skills: ["Wiring", "Panel Work", "Lighting"], coverImage: "https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=800&h=400&fit=crop", projectsCount: 89, upiId: "amitverma@upi", bankAccount: "98765432101", bankIfsc: "HDFC0001234" },
-  { id: 102, name: "Raj Malhotra", profession: "Plumber", avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=100&h=100&fit=crop&crop=face", rating: 4.6, verified: true, location: "3.1 km away", experience: "10 Years Exp", bio: "Reliable plumber for all types of plumbing needs.", skills: ["Pipe Fitting", "Leak Repair", "Drainage"], coverImage: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&h=400&fit=crop", projectsCount: 112, upiId: "rajplumber@upi", bankAccount: "76543210987", bankIfsc: "ICIC0005678" },
-  { id: 103, name: "Meera Joshi", profession: "Architect", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face", rating: 4.9, verified: true, location: "5.4 km away", experience: "12 Years Exp", bio: "Creative architect specializing in modern residential design.", skills: ["Design", "3D Modeling", "Planning"], coverImage: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=400&fit=crop", projectsCount: 67, upiId: "meerajoshi@upi", bankAccount: "43210987654", bankIfsc: "PUNB0006789" },
-  { id: 104, name: "Vikram Nair", profession: "Civil Engineer", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face", rating: 4.7, verified: true, location: "4.2 km away", experience: "15 Years Exp", bio: "Structural engineer with expertise in large-scale projects.", skills: ["Structural Design", "Site Management", "QC"], coverImage: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800&h=400&fit=crop", projectsCount: 203, upiId: "vikramnair@upi", bankAccount: "54321098765", bankIfsc: "CNRB0002345" },
-  { id: 105, name: "Sunita Rao", profession: "Interior Designer", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face", rating: 4.8, verified: false, location: "6.1 km away", experience: "7 Years Exp", bio: "Transforming spaces with elegant and functional designs.", skills: ["Space Planning", "Color Theory", "Furniture"], coverImage: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800&h=400&fit=crop", projectsCount: 54, upiId: "sunitarao@upi", bankAccount: "65432109876", bankIfsc: "BARB0BOMBAI" },
-  { id: 106, name: "Deepak Sharma", profession: "Mason", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face", rating: 4.5, verified: true, location: "1.8 km away", experience: "20 Years Exp", bio: "Master mason with expertise in brick and stone work.", skills: ["Brick Work", "Stone Masonry", "Plastering"], coverImage: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&h=400&fit=crop", projectsCount: 178, upiId: "deepakmason@upi", bankAccount: "87654321098", bankIfsc: "SBIN0007890" },
-]
 
 const initialFollowing = [
   { id: 201, name: "Ramesh Kumar", profession: "Mason", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face", isOnline: true },
@@ -196,6 +188,9 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
             let parsedCoverImage = ""
             let parsedAvailable = true
             let parsedReviewsCount = 0
+            let parsedCrewSize = ""
+            let parsedCrewComposition = ""
+            let parsedGroupName = ""
 
             if (w.bio) {
               try {
@@ -205,6 +200,9 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
                   parsedExperience = p.experience || ""
                   parsedWorkerType = p.workerType || "normal"
                   parsedCoverImage = p.coverImage || ""
+                  parsedCrewSize = p.crewSize || ""
+                  parsedCrewComposition = p.crewComposition || ""
+                  parsedGroupName = p.groupName || ""
                   if (p.expectedRates?.trim()) parsedExpectedRates = p.expectedRates
                   if (p.available !== undefined) parsedAvailable = p.available
                   if (p.reviewsCount !== undefined) parsedReviewsCount = Number(p.reviewsCount)
@@ -233,6 +231,9 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
               bankAccount: w.bankAccount || "",
               bankIfsc: w.bankIfsc || "",
               workerType: parsedWorkerType,
+              crewSize: parsedCrewSize,
+              crewComposition: parsedCrewComposition,
+              groupName: parsedGroupName,
             }
           }).filter((p: any) => p.workerType !== "emergency")
           setDbWorkers(parsed)
@@ -256,7 +257,7 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
     return { ...pro, distance, _km }
   })
 
-  const activeWorkers = dbWorkers.length > 0 ? workersWithDistance : allProfessionals.map(p => ({ ...p, _km: Infinity }))
+  const activeWorkers = workersWithDistance
 
   const toggleFollow = (pro: any) => {
     contextToggleFollow(pro.id, pro.name, pro.profession, pro.avatar)

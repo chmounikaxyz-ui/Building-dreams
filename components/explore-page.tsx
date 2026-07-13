@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, MapPin, Star, BadgeCheck, Sliders, UserCheck, Clock, ClipboardCheck, Calendar, Briefcase, ShoppingBag, Trash2, RotateCcw } from "lucide-react"
+import { Search, MapPin, Star, BadgeCheck, Sliders, UserCheck, Clock, ClipboardCheck, Calendar, Briefcase, ShoppingBag, Trash2, RotateCcw, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -50,6 +50,9 @@ interface Professional {
   upiId?: string
   bankAccount?: string
   bankIfsc?: string
+  crewSize?: string | number
+  crewComposition?: string
+  groupName?: string
 }
 
 export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActiveTab?: (tab: string) => void; userRole?: string }) {
@@ -84,6 +87,9 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
             let parsedCoverImage = ""
             let parsedAvailable = true
             let parsedReviewsCount = 0
+            let parsedCrewSize = ""
+            let parsedCrewComposition = ""
+            let parsedGroupName = ""
 
             if (w.bio) {
               try {
@@ -93,6 +99,9 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
                   parsedExperience = p.experience || ""
                   parsedWorkerType = p.workerType || "normal"
                   parsedCoverImage = p.coverImage || ""
+                  parsedCrewSize = p.crewSize || ""
+                  parsedCrewComposition = p.crewComposition || ""
+                  parsedGroupName = p.groupName || ""
                   if (p.expectedRates?.trim()) {
                     parsedExpectedRates = p.expectedRates
                   }
@@ -128,6 +137,9 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
               bankAccount: w.bankAccount || "",
               bankIfsc: w.bankIfsc || "",
               workerType: parsedWorkerType,
+              crewSize: parsedCrewSize,
+              crewComposition: parsedCrewComposition,
+              groupName: parsedGroupName,
             }
           }).filter((p: any) => p.workerType !== "emergency")
 
@@ -421,6 +433,9 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
     rate: selectedProfessional.rate,
     workerType: selectedProfessional.workerType,
     available: selectedProfessional.available,
+    crewSize: selectedProfessional.crewSize,
+    crewComposition: selectedProfessional.crewComposition,
+    groupName: selectedProfessional.groupName,
     gallery: [
       selectedProfessional.coverImage,
       "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=300&h=300&fit=crop",
@@ -716,15 +731,22 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
               ) : (
                 <div className="w-full h-full" />
               )}
-              {pro.available ? (
-                <span className="absolute top-3 right-3 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                  Available
-                </span>
-              ) : (
-                <span className="absolute top-3 right-3 bg-muted-foreground text-white text-xs px-2 py-1 rounded-full">
-                  Busy
-                </span>
-              )}
+              <div className="absolute top-3 right-3 flex gap-1.5 z-10">
+                {pro.workerType === "crew" && (
+                  <span className="bg-primary/15 text-primary text-[10px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                    <Users className="w-3 h-3" /> {pro.crewSize ? `${pro.crewSize} Members` : "Crew"}
+                  </span>
+                )}
+                {pro.available ? (
+                  <span className="bg-green-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm">
+                    Available
+                  </span>
+                ) : (
+                  <span className="bg-muted-foreground text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm">
+                    Busy
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Profile Info */}
@@ -750,7 +772,11 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
                         <BadgeCheck className="w-4 h-4 text-primary fill-primary/20" />
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">{pro.profession}</p>
+                    {pro.workerType === "crew" && pro.groupName ? (
+                      <p className="text-xs font-semibold text-primary">{pro.groupName}</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">{pro.profession}</p>
+                    )}
                   </div>
                   <div className="text-right">
                   </div>
