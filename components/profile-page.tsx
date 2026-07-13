@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import { 
   MapPin, Star, Calendar, Briefcase, Edit2, Share2, 
   Heart, MessageCircle, Bookmark, Grid3X3, BadgeCheck, Camera, Plus, X, Trash2, Image as ImageIcon, Tag,
-  Phone, CreditCard, QrCode, Building2, Banknote, Store
+  Phone, CreditCard, QrCode, Building2, Banknote, Store, Users
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -90,6 +90,9 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
     bankAccount: "",
     bankIfsc: "",
     workerType: "",
+    crewSize: "",
+    crewComposition: "",
+    groupName: "",
   })
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false)
@@ -110,6 +113,9 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
           let parsedExpectedRates = u.expectedRates || ""
           let parsedStoreName = u.storeName || ""
           let parsedWorkerType = ""
+          let parsedCrewSize = ""
+          let parsedCrewComposition = ""
+          let parsedGroupName = ""
           
           if (u.bio) {
             try {
@@ -120,6 +126,9 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
                 parsedExpectedRates = p.expectedRates || ""
                 parsedStoreName = p.storeName || ""
                 parsedWorkerType = p.workerType || ""
+                parsedCrewSize = p.crewSize || ""
+                parsedCrewComposition = p.crewComposition || ""
+                parsedGroupName = p.groupName || ""
               }
             } catch {}
           }
@@ -142,6 +151,9 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
             bankAccount: u.bankAccount || "",
             bankIfsc: u.bankIfsc || "",
             workerType: parsedWorkerType,
+            crewSize: parsedCrewSize,
+            crewComposition: parsedCrewComposition,
+            groupName: parsedGroupName,
           }))
           // Reload avatar for new user
           setDisplayAvatar(u.avatar || "")
@@ -412,8 +424,7 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
               <Camera className="w-4 h-4" />
             </Button>
           </div>
-
-          {/* Name and Actions */}
+                    {/* Name and Actions */}
           <div className="flex-1 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -422,6 +433,11 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
                   <BadgeCheck className="w-6 h-6 text-primary fill-primary/20" />
                 )}
               </div>
+              {profile.workerType === "crew" && profile.groupName && (
+                <p className="text-sm font-semibold text-primary mt-0.5 flex items-center gap-1.5">
+                  <Users className="w-4 h-4" /> {profile.groupName}
+                </p>
+              )}
               <p className="text-muted-foreground">{profile.email}</p>
             </div>
             <div className="flex gap-2">
@@ -452,7 +468,9 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
         {/* Bio and Details */}
         <div className="py-4 space-y-4 border-b border-border">
           <div>
-            <p className="font-semibold text-foreground">{profile.profession}</p>
+            <p className="font-semibold text-foreground">
+              {profile.workerType === "crew" ? "Group Leader / Contractor" : profile.profession}
+            </p>
             <p className="text-sm text-muted-foreground mt-1">{profile.bio}</p>
           </div>
 
@@ -477,8 +495,58 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
               <Calendar className="w-4 h-4 text-slate-400" />
               Joined 2019
             </div>
-
           </div>
+
+          {/* Crew Breakdown Details Card */}
+          {profile.workerType === "crew" && (
+            <div className="bg-card border border-border rounded-2xl p-5 mt-4 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-sm text-card-foreground">Crew & Team Configuration</h4>
+                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Managed by {profile.name}</p>
+                  </div>
+                </div>
+                {profile.crewSize && (
+                  <span className="bg-primary/10 text-primary text-xs px-2.5 py-1 rounded-full font-bold">
+                    {profile.crewSize} Members
+                  </span>
+                )}
+              </div>
+
+              {profile.crewComposition && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Crew Skills Breakdown</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {profile.crewComposition.split(",").map((member: string, i: number) => {
+                      const cleanMember = member.trim();
+                      if (!cleanMember) return null;
+                      
+                      let icon = "👷";
+                      const lower = cleanMember.toLowerCase();
+                      if (lower.includes("paint")) icon = "🎨";
+                      else if (lower.includes("plumb")) icon = "🔧";
+                      else if (lower.includes("electr") || lower.includes("wire")) icon = "⚡";
+                      else if (lower.includes("carpenter") || lower.includes("wood")) icon = "🪚";
+                      else if (lower.includes("mason") || lower.includes("brick")) icon = "🧱";
+                      else if (lower.includes("tile") || lower.includes("marble")) icon = "📐";
+                      else if (lower.includes("helper") || lower.includes("labor")) icon = "🤝";
+                      
+                      return (
+                        <div key={i} className="flex items-center gap-2.5 bg-secondary/40 px-3.5 py-2 rounded-xl text-xs font-semibold text-card-foreground border border-border/40">
+                          <span className="text-base shrink-0">{icon}</span>
+                          <span className="truncate">{cleanMember}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Skills and Certifications removed */}
         </div>
@@ -687,18 +755,44 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
               )}
 
               {user?.role === "worker" && (
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Expected Rates</label>
-                  <div className="relative">
-                    <Banknote className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <Input
-                      value={editDraft.expectedRates}
-                      onChange={e => setEditDraft(d => ({ ...d, expectedRates: e.target.value }))}
-                      className="pl-8 bg-secondary border-0"
-                      placeholder="e.g. ₹500/day or ₹1000/ton"
-                    />
+                <>
+                  {editDraft.workerType === "crew" && (
+                    <>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Group / Crew Name</label>
+                        <Input
+                          value={editDraft.groupName}
+                          onChange={e => setEditDraft(d => ({ ...d, groupName: e.target.value }))}
+                          className="bg-secondary border-0"
+                          placeholder="e.g. Verma Painting & Masonry Services"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Total Crew Size</label>
+                        <Input
+                          type="number"
+                          value={editDraft.crewSize}
+                          onChange={e => setEditDraft(d => ({ ...d, crewSize: e.target.value }))}
+                          className="bg-secondary border-0"
+                          placeholder="e.g. 6"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Expected Rates</label>
+                    <div className="relative">
+                      <Banknote className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        value={editDraft.expectedRates}
+                        onChange={e => setEditDraft(d => ({ ...d, expectedRates: e.target.value }))}
+                        className="pl-8 bg-secondary border-0"
+                        placeholder="e.g. ₹500/day or ₹1000/ton"
+                      />
+                    </div>
                   </div>
-                </div>
+                </>
               )}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Phone Number</label>
@@ -768,6 +862,9 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
                     expectedRates: updated.expectedRates,
                     storeName: user?.role === "seller" ? updated.storeName : undefined,
                     workerType: user?.role === "worker" ? updated.workerType : undefined,
+                    crewSize: user?.role === "worker" ? updated.crewSize : undefined,
+                    crewComposition: user?.role === "worker" ? updated.crewComposition : undefined,
+                    groupName: user?.role === "worker" ? updated.groupName : undefined,
                     coverImage: parsedCover || undefined,
                   }
                   const stringifiedBio = JSON.stringify(bioObj)
@@ -787,6 +884,9 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
                       expectedRates: updated.expectedRates,
                       storeName: user?.role === "seller" ? updated.storeName : undefined,
                       workerType: user?.role === "worker" ? updated.workerType : undefined,
+                      crewSize: user?.role === "worker" ? updated.crewSize : undefined,
+                      crewComposition: user?.role === "worker" ? updated.crewComposition : undefined,
+                      groupName: user?.role === "worker" ? updated.groupName : undefined,
                       phone: updated.phone,
                       upiId: updated.upiId,
                       bankAccount: updated.bankAccount,

@@ -446,6 +446,9 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
     let parsedExpectedRates = ""
     let parsedWorkerType = "normal"
     let parsedCoverImage = ""
+    let parsedCrewSize = ""
+    let parsedCrewComposition = ""
+    let parsedGroupName = ""
 
     if (post.user.bio) {
       try {
@@ -456,6 +459,9 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
           parsedExpectedRates = p.expectedRates || ""
           parsedWorkerType = p.workerType || "normal"
           parsedCoverImage = p.coverImage || ""
+          parsedCrewSize = p.crewSize || ""
+          parsedCrewComposition = p.crewComposition || ""
+          parsedGroupName = p.groupName || ""
         }
       } catch { }
     }
@@ -481,6 +487,9 @@ export function MainFeed({ setActiveTab }: { setActiveTab?: (tab: string) => voi
       bankAccount: post.user.bankAccount || "",
       bankIfsc: post.user.bankIfsc || "",
       workerType: parsedWorkerType,
+      crewSize: parsedCrewSize,
+      crewComposition: parsedCrewComposition,
+      groupName: parsedGroupName,
     }
   }
   const selectedWorker = getSelectedWorker()

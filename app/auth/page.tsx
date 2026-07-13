@@ -89,7 +89,9 @@ export default function AuthPage() {
   // Worker-specific
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [experience, setExperience] = useState("")
-  const [workerType, setWorkerType] = useState<"normal" | "emergency" | "">("")
+  const [workerType, setWorkerType] = useState<"normal" | "emergency" | "crew" | "">("")
+  const [crewSize, setCrewSize] = useState("")
+  const [groupName, setGroupName] = useState("")
   const [customSkill, setCustomSkill] = useState("")
 
   // Seller-specific
@@ -146,8 +148,18 @@ export default function AuthPage() {
     }
     if (role === "worker") {
       if (!workerType) {
-        setError("Please select whether you are a Normal Worker or an Emergency Worker")
+        setError("Please select your worker type (Individual, Emergency, or Group/Crew)")
         return
+      }
+      if (workerType === "crew") {
+        if (!groupName.trim()) {
+          setError("Please enter your Group / Crew Name")
+          return
+        }
+        if (!crewSize.trim()) {
+          setError("Please enter your Total Crew Size")
+          return
+        }
       }
       if (selectedSkills.length === 0) {
         setError("Please select at least one skill")
@@ -197,6 +209,8 @@ export default function AuthPage() {
           experience: (role === "worker" || role === "seller") ? experience : undefined,
           expectedRates: role === "worker" ? expectedRates : undefined,
           workerType: role === "worker" ? workerType : undefined,
+          crewSize: (role === "worker" && workerType === "crew") ? crewSize : undefined,
+          groupName: (role === "worker" && workerType === "crew") ? groupName : undefined,
         }),
       })
       const data = await res.json()
@@ -495,8 +509,8 @@ export default function AuthPage() {
                     {/* Worker Type selection */}
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Worker Type <span className="text-destructive">*</span></label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {(["normal", "emergency"] as const).map(type => (
+                      <div className="grid grid-cols-3 gap-2">
+                        {(["normal", "emergency", "crew"] as const).map(type => (
                           <button
                             key={type}
                             type="button"
@@ -505,17 +519,43 @@ export default function AuthPage() {
                               setSelectedSkills([])
                             }}
                             className={cn(
-                              "py-2.5 px-3 rounded-xl text-xs font-semibold border transition-all",
+                              "py-2.5 px-2 rounded-xl text-[10px] font-semibold border transition-all truncate",
                               workerType === type
                                 ? "bg-violet-600 text-white border-violet-600 shadow-sm"
                                 : "bg-background border-border text-foreground hover:border-violet-300"
                             )}
                           >
-                            {type === "emergency" ? "Emergency Worker" : "Normal Worker"}
+                            {type === "emergency" ? "Emergency" : type === "crew" ? "Group/Crew" : "Individual"}
                           </button>
                         ))}
                       </div>
                     </div>
+
+                    {workerType === "crew" && (
+                      <div className="space-y-3 p-3 bg-background/50 rounded-xl border border-violet-100 dark:border-violet-900/50 mt-2">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-foreground">Group / Crew Name <span className="text-destructive">*</span></label>
+                          <Input
+                            placeholder="e.g. Verma Painting & Masonry Services"
+                            value={groupName}
+                            onChange={e => setGroupName(e.target.value)}
+                            className="h-10 bg-background border-0 rounded-xl text-xs"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-foreground">Total Crew Size <span className="text-destructive">*</span></label>
+                          <Input
+                            type="number"
+                            placeholder="e.g. 6"
+                            value={crewSize}
+                            onChange={e => setCrewSize(e.target.value)}
+                            className="h-10 bg-background border-0 rounded-xl text-xs"
+                            required
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {workerType && (
                       <>

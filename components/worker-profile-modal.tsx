@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
-import { X, Trash2, MapPin, Calendar, Star, CheckCircle, MessageSquare, Building, UserCheck, Clock, ClipboardCheck, Send, ChevronRight, QrCode, CreditCard, Banknote, Heart, MessageCircle, Bookmark } from "lucide-react"
+import { X, Trash2, MapPin, Calendar, Star, CheckCircle, MessageSquare, Building, UserCheck, Clock, ClipboardCheck, Send, ChevronRight, QrCode, CreditCard, Banknote, Heart, MessageCircle, Bookmark, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -31,6 +31,9 @@ export interface WorkerProfile {
   rate?: string
   role?: string
   available?: boolean
+  crewSize?: string | number
+  crewComposition?: string
+  groupName?: string
 }
 
 export type CategoryRatings = {
@@ -123,6 +126,72 @@ export function WorkerProfileModal({
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (isOpen && propWorker?.id) {
+      const fetchLatestDetails = async () => {
+        try {
+          const res = await fetch(`/api/users/${propWorker.id}`)
+          if (res.ok) {
+            const foundUser = await res.json()
+            let parsedBioText = foundUser.bio || ""
+            let parsedExperience = "Experienced"
+            let parsedCoverImage = ""
+            let parsedAvailable = true
+            let parsedWorkerType = "normal"
+            let parsedCrewSize = ""
+            let parsedCrewComposition = ""
+            let parsedGroupName = ""
+            let parsedExpectedRates = ""
+            if (foundUser.bio) {
+              try {
+                if (foundUser.bio.trim().startsWith("{") && foundUser.bio.trim().endsWith("}")) {
+                  const p = JSON.parse(foundUser.bio)
+                  parsedBioText = p.bio || ""
+                  parsedExperience = p.experience || "Experienced"
+                  parsedCoverImage = p.coverImage || ""
+                  parsedWorkerType = p.workerType || "normal"
+                  parsedCrewSize = p.crewSize || ""
+                  parsedCrewComposition = p.crewComposition || ""
+                  parsedGroupName = p.groupName || ""
+                  parsedExpectedRates = p.expectedRates || ""
+                  if (p.available !== undefined) {
+                    parsedAvailable = p.available
+                  }
+                }
+              } catch {}
+            }
+            
+            setLocalWorker({
+              id: foundUser.id,
+              name: foundUser.name,
+              profession: foundUser.profession || (foundUser.role === "worker" ? "Worker" : "Explorer"),
+              avatar: foundUser.avatar || "",
+              coverImage: parsedCoverImage,
+              verified: foundUser.verified || false,
+              location: foundUser.location || "Mumbai, India",
+              experience: parsedExperience,
+              rating: foundUser.rating || 0,
+              projectsCount: 0,
+              bio: parsedBioText || "No bio provided.",
+              skills: foundUser.profession ? [foundUser.profession] : [],
+              gallery: [],
+              role: foundUser.role,
+              available: parsedAvailable,
+              workerType: parsedWorkerType,
+              crewSize: parsedCrewSize,
+              crewComposition: parsedCrewComposition,
+              groupName: parsedGroupName,
+              rate: parsedExpectedRates,
+            })
+          }
+        } catch (err) {
+          console.error("Failed to load user profile on modal mount:", err)
+        }
+      }
+      fetchLatestDetails()
+    }
+  }, [isOpen, propWorker?.id])
+
   // Filter posts belonging to this worker
   const workerPosts = posts.filter(p => 
     worker && (
@@ -167,16 +236,14 @@ export function WorkerProfileModal({
   // Get explorer info
   const explorerInfo = (() => { try { return JSON.parse(localStorage.getItem("auth_user") || "{}") } catch { return {} } })()
 
-  const isOwnProfile = worker ? (
-    String(worker.id) === String(explorerInfo.id) || 
-    String(worker.name).toLowerCase() === String(explorerInfo.name).toLowerCase()
+  const isOwnProfile = worker && explorerInfo?.id ? (
+    String(worker.id) === String(explorerInfo.id)
   ) : false
 
   const showMessageButton = !isOwnProfile
 
   const isOwnPost = (post: any) => {
-    return String(post.user?.id) === String(explorerInfo.id) || 
-      String(post.user?.name).toLowerCase() === String(explorerInfo.name).toLowerCase()
+    return String(post.user?.id) === String(explorerInfo.id)
   }
 
   // Check existing request status for this worker from this explorer (ignoring completed requests so they can hire again)
@@ -257,6 +324,11 @@ export function WorkerProfileModal({
         let parsedExperience = "Experienced"
         let parsedCoverImage = ""
         let parsedAvailable = true
+        let parsedWorkerType = "normal"
+        let parsedCrewSize = ""
+        let parsedCrewComposition = ""
+        let parsedGroupName = ""
+        let parsedExpectedRates = ""
         if (foundUser.bio) {
           try {
             if (foundUser.bio.trim().startsWith("{") && foundUser.bio.trim().endsWith("}")) {
@@ -264,6 +336,11 @@ export function WorkerProfileModal({
               parsedBioText = p.bio || ""
               parsedExperience = p.experience || "Experienced"
               parsedCoverImage = p.coverImage || ""
+              parsedWorkerType = p.workerType || "normal"
+              parsedCrewSize = p.crewSize || ""
+              parsedCrewComposition = p.crewComposition || ""
+              parsedGroupName = p.groupName || ""
+              parsedExpectedRates = p.expectedRates || ""
               if (p.available !== undefined) {
                 parsedAvailable = p.available
               }
@@ -286,7 +363,12 @@ export function WorkerProfileModal({
           skills: foundUser.profession ? [foundUser.profession] : [],
           gallery: [],
           role: foundUser.role,
-          available: parsedAvailable
+          available: parsedAvailable,
+          workerType: parsedWorkerType,
+          crewSize: parsedCrewSize,
+          crewComposition: parsedCrewComposition,
+          groupName: parsedGroupName,
+          rate: parsedExpectedRates,
         })
       }
     } catch (err) {
@@ -390,20 +472,86 @@ export function WorkerProfileModal({
                     <CheckCircle className="w-3 h-3 mr-1" />VERIFIED PRO
                   </Badge>
                 )}
+                {worker.workerType === "crew" && (
+                  <Badge className="bg-primary/20 text-primary border-primary/30 mb-2">
+                    <Users className="w-3 h-3 mr-1" />CREW
+                  </Badge>
+                )}
                 {activeJob && (
                   <Badge className="bg-blue-500/20 text-blue-600 border-blue-500/30 mb-2">
                     <UserCheck className="w-3 h-3 mr-1" />HIRED
                   </Badge>
                 )}
               </div>
-              <h2 className="text-2xl font-bold text-card-foreground tracking-tight mb-3">{worker.name.toUpperCase()}</h2>
+              <h2 className="text-2xl font-bold text-card-foreground tracking-tight mb-1">{worker.name.toUpperCase()}</h2>
+              {worker.workerType === "crew" && worker.groupName && (
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-primary mb-3">
+                  <Users className="w-4 h-4" />
+                  <span>{worker.groupName}</span>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-6">
-                <div className="flex items-center gap-1.5"><Building className="w-4 h-4" /><span className="uppercase tracking-wide">{worker.profession}</span></div>
+                <div className="flex items-center gap-1.5">
+                  <Building className="w-4 h-4" />
+                  <span className="uppercase tracking-wide">
+                    {worker.workerType === "crew" ? "Group Leader / Contractor" : worker.profession}
+                  </span>
+                </div>
                 <div className="flex items-center gap-1.5"><MapPin className="w-4 h-4" /><span className="uppercase tracking-wide">{worker.location}</span></div>
                 {!isExplorer && worker.experience && (
                   <div className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /><span className="uppercase tracking-wide">{worker.experience}</span></div>
                 )}
               </div>
+
+              {worker.workerType === "crew" && (
+                <div className="bg-card border border-border rounded-2xl p-5 mb-6 space-y-4 shadow-sm text-left">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-sm text-card-foreground">Crew & Team Configuration</h4>
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Led by {worker.name}</p>
+                      </div>
+                    </div>
+                    {worker.crewSize && (
+                      <span className="bg-primary/10 text-primary text-xs px-2.5 py-1 rounded-full font-bold">
+                        {worker.crewSize} Members
+                      </span>
+                    )}
+                  </div>
+
+                  {worker.crewComposition && (
+                    <div className="space-y-2 text-left">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Crew Skills Breakdown</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {worker.crewComposition.split(",").map((member: string, i: number) => {
+                          const cleanMember = member.trim();
+                          if (!cleanMember) return null;
+                          
+                          let icon = "👷";
+                          const lower = cleanMember.toLowerCase();
+                          if (lower.includes("paint")) icon = "🎨";
+                          else if (lower.includes("plumb")) icon = "🔧";
+                          else if (lower.includes("electr") || lower.includes("wire")) icon = "⚡";
+                          else if (lower.includes("carpenter") || lower.includes("wood")) icon = "🪚";
+                          else if (lower.includes("mason") || lower.includes("brick")) icon = "🧱";
+                          else if (lower.includes("tile") || lower.includes("marble")) icon = "📐";
+                          else if (lower.includes("helper") || lower.includes("labor")) icon = "🤝";
+                          
+                          return (
+                            <div key={i} className="flex items-center gap-2.5 bg-secondary/40 px-3.5 py-2 rounded-xl text-xs font-semibold text-card-foreground border border-border/40 justify-start">
+                              <span className="text-base shrink-0">{icon}</span>
+                              <span className="truncate">{cleanMember}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {isExplorer && worker.bio && (
                 <div className="bg-muted/30 border border-border rounded-2xl p-4 mb-4">

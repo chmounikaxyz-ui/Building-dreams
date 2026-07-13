@@ -11,7 +11,7 @@ const ROLE_DEFAULTS: Record<string, { profession: string; avatar: string }> = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { email, password, name, role = "explorer", profession, phone, businessName, skills, experience, expectedRates, upiId, bankAccount, bankIfsc, location, lat, lon, workerType } = body
+    const { email, password, name, role = "explorer", profession, phone, businessName, skills, experience, expectedRates, upiId, bankAccount, bankIfsc, location, lat, lon, workerType, crewSize, groupName } = body
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -63,12 +63,16 @@ export async function POST(req: NextRequest) {
         bio: (role === "worker" || role === "seller")
           ? JSON.stringify({
               bio: role === "worker"
-                ? `${experience || ""} experience in ${skills?.join(", ") || "construction"}.`.trim()
+                ? (workerType === "crew"
+                    ? `Group/Crew leader. ${experience || ""} experience.`
+                    : `${experience || ""} experience in ${skills?.join(", ") || "construction"}.`.trim())
                 : `Selling construction materials${businessName ? ` · ${businessName}` : ""}.`,
               experience: experience || "",
               expectedRates: expectedRates || "",
               storeName: role === "seller" ? businessName : undefined,
               workerType: role === "worker" ? workerType : undefined,
+              crewSize: (role === "worker" && workerType === "crew") ? crewSize : undefined,
+              groupName: (role === "worker" && workerType === "crew") ? groupName : undefined,
             })
           : "",
       },

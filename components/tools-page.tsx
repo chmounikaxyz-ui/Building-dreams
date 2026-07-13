@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
-import { Calculator, Ruler, Percent, TrendingUp, FileText, ChevronRight, RotateCcw, Layers, Mountain, Sparkles, SquareParking, Coins, Building2, Paintbrush, Zap, Plus, Trash2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Calculator, Ruler, Percent, TrendingUp, TrendingDown, FileText, ChevronRight, RotateCcw, Layers, Mountain, Sparkles, SquareParking, Coins, Building2, Paintbrush, Zap, Plus, Trash2, Upload, Activity, Info, X, Package, History, ClipboardList, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,10 +16,10 @@ const tools = [
     color: "bg-violet-500"
   },
   {
-    id: "area",
-    label: "Area Calculator",
-    icon: Ruler,
-    description: "Calculate construction area",
+    id: "storage",
+    label: "Storage Manager",
+    icon: ClipboardList,
+    description: "Manage construction material stock counts",
     color: "bg-purple-500"
   },
   {
@@ -38,6 +38,7 @@ const tools = [
   },
 ]
 
+
 export function ToolsPage() {
   const [activeTool, setActiveTool] = useState<string | null>(null)
 
@@ -54,10 +55,68 @@ export function ToolsPage() {
   const [expenseCategory, setExpenseCategory] = useState<Expense["category"]>("materials")
   const [expenseDescription, setExpenseDescription] = useState("")
 
-  // Area Calculator State
-  const [areaLength, setAreaLength] = useState("")
-  const [areaWidth, setAreaWidth] = useState("")
-  const [areaResult, setAreaResult] = useState<{ sqft: number; sqm: number } | null>(null)
+  // Storage Manager State
+  interface InventoryItem {
+    id: string;
+    name: string;
+    category: string;
+    quantity: number;
+    unit: string;
+    threshold: number;
+  }
+
+  interface StockLog {
+    id: string;
+    itemId: string;
+    itemName: string;
+    type: "in" | "out";
+    quantity: number;
+    date: string;
+    notes: string;
+  }
+
+  const defaultInventory: InventoryItem[] = []
+
+  const getTodayDateString = () => {
+    const d = new Date()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${d.getFullYear()}-${month}-${day}`
+  };
+
+  const getPastDateString = (daysAgo: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() - daysAgo)
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${d.getFullYear()}-${month}-${day}`
+  };
+
+  const defaultLogs: StockLog[] = []
+
+  const [inventory, setInventory] = useState<InventoryItem[]>([])
+  const [stockLogs, setStockLogs] = useState<StockLog[]>([])
+
+  // Form states for adding items
+  const [newItemName, setNewItemName] = useState("")
+  const [newItemCategory, setNewItemCategory] = useState("Cement")
+  const [newItemQuantity, setNewItemQuantity] = useState("")
+  const [newItemUnit, setNewItemUnit] = useState("Bags")
+  const [newItemThreshold, setNewItemThreshold] = useState("")
+
+  // Adjustment states
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [adjustAmount, setAdjustAmount] = useState("")
+  const [adjustType, setAdjustType] = useState<"in" | "out">("in")
+  const [adjustNotes, setAdjustNotes] = useState("")
+  const [adjustDate, setAdjustDate] = useState(getTodayDateString())
+  const [selectedDailySheetDate, setSelectedDailySheetDate] = useState(getTodayDateString())
+  const [managerTab, setManagerTab] = useState<"inventory" | "dailySheets">("inventory")
+  const [dailyInflowInput, setDailyInflowInput] = useState<Record<string, string>>({})
+  const [dailyOutflowInput, setDailyOutflowInput] = useState<Record<string, string>>({})
+  const [dailyNotesInput, setDailyNotesInput] = useState<Record<string, string>>({})
+  const [isEditingDailySheet, setIsEditingDailySheet] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(false)
 
   // Cost Estimator State
   const [costArea, setCostArea] = useState("")
@@ -97,6 +156,212 @@ export function ToolsPage() {
     }
   }
 
+  // Storage Manager Actions
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedInv = localStorage.getItem("construction_inventory")
+      const savedLogs = localStorage.getItem("construction_inventory_logs")
+      if (savedInv) {
+        try { setInventory(JSON.parse(savedInv)) } catch (e) { console.error(e) }
+      } else {
+        setInventory(defaultInventory)
+        localStorage.setItem("construction_inventory", JSON.stringify(defaultInventory))
+      }
+
+      if (savedLogs) {
+        try { setStockLogs(JSON.parse(savedLogs)) } catch (e) { console.error(e) }
+      } else {
+        setStockLogs(defaultLogs)
+        localStorage.setItem("construction_inventory_logs", JSON.stringify(defaultLogs))
+      }
+    }
+  }, [])
+
+  const saveInventory = (updatedInv: InventoryItem[] | ((prev: InventoryItem[]) => InventoryItem[])) => {
+    setInventory(prev => {
+      const next = typeof updatedInv === "function" ? updatedInv(prev) : updatedInv
+      if (typeof window !== "undefined") {
+        localStorage.setItem("construction_inventory", JSON.stringify(next))
+      }
+      return next
+    })
+  }
+
+  const saveLogs = (updatedLogs: StockLog[] | ((prev: StockLog[]) => StockLog[])) => {
+    setStockLogs(prev => {
+      const next = typeof updatedLogs === "function" ? updatedLogs(prev) : updatedLogs
+      if (typeof window !== "undefined") {
+        localStorage.setItem("construction_inventory_logs", JSON.stringify(next))
+      }
+      return next
+    })
+  }
+
+  const addInventoryItem = () => {
+    const qty = parseFloat(newItemQuantity)
+    const thresh = parseFloat(newItemThreshold)
+    if (newItemName.trim() && !isNaN(qty) && qty >= 0 && !isNaN(thresh) && thresh >= 0) {
+      const newItem: InventoryItem = {
+        id: Date.now().toString(),
+        name: newItemName.trim(),
+        category: newItemCategory,
+        quantity: qty,
+        unit: newItemUnit,
+        threshold: thresh
+      }
+      
+      saveInventory(prev => [...prev, newItem])
+
+      const newLog: StockLog = {
+        id: "log-" + Date.now(),
+        itemId: newItem.id,
+        itemName: newItem.name,
+        type: "in",
+        quantity: qty,
+        date: getTodayDateString(),
+        notes: "Initial stock registered"
+      }
+      saveLogs(prev => [newLog, ...prev])
+
+      setNewItemName("")
+      setNewItemQuantity("")
+      setNewItemThreshold("")
+    }
+  }
+
+  const adjustStock = (itemId: string, amountStr: string, type: "in" | "out", notesStr: string, dateStr: string) => {
+    const amount = parseFloat(amountStr)
+    if (isNaN(amount) || amount <= 0) return
+
+    const item = inventory.find(i => i.id === itemId)
+    if (!item) return
+
+    const newLog: StockLog = {
+      id: "log-" + Date.now(),
+      itemId: item.id,
+      itemName: item.name,
+      type,
+      quantity: amount,
+      date: dateStr || getTodayDateString(),
+      notes: notesStr.trim() || (type === "in" ? "Stock added" : "Stock used")
+    }
+
+    saveLogs(prev => [newLog, ...prev])
+
+    saveInventory(prev => prev.map(i => {
+      if (i.id === itemId) {
+        const newQty = type === "in" ? i.quantity + amount : Math.max(0, i.quantity - amount)
+        return { ...i, quantity: newQty }
+      }
+      return i
+    }))
+  }
+
+  const saveDailyLogs = () => {
+    let newLogs: StockLog[] = []
+    let invUpdates: Record<string, number> = {}
+
+    inventory.forEach(item => {
+      const inflowStr = dailyInflowInput[item.id]
+      const outflowStr = dailyOutflowInput[item.id]
+      const notes = (dailyNotesInput[item.id] || "").trim()
+
+      const inflow = parseFloat(inflowStr || "0")
+      const outflow = parseFloat(outflowStr || "0")
+
+      if (inflow > 0 || outflow > 0) {
+        invUpdates[item.id] = (inflow > 0 ? inflow : 0) - (outflow > 0 ? outflow : 0)
+
+        if (inflow > 0) {
+          newLogs.push({
+            id: `log-${Date.now()}-${item.id}-in`,
+            itemId: item.id,
+            itemName: item.name,
+            type: "in",
+            quantity: inflow,
+            date: selectedDailySheetDate,
+            notes: notes || "Daily log entry (Inflow)"
+          })
+        }
+
+        if (outflow > 0) {
+          newLogs.push({
+            id: `log-${Date.now()}-${item.id}-out`,
+            itemId: item.id,
+            itemName: item.name,
+            type: "out",
+            quantity: outflow,
+            date: selectedDailySheetDate,
+            notes: notes || "Daily log entry (Usage)"
+          })
+        }
+      }
+    })
+
+    if (newLogs.length > 0) {
+      saveLogs(prev => [...newLogs, ...prev])
+
+      saveInventory(prev => prev.map(item => {
+        if (invUpdates[item.id] !== undefined) {
+          const newQty = Math.max(0, item.quantity + invUpdates[item.id])
+          return { ...item, quantity: newQty }
+        }
+        return item
+      }))
+
+      setDailyInflowInput({})
+      setDailyOutflowInput({})
+      setDailyNotesInput({})
+    }
+  }
+
+  const getDailySummary = (dateStr: string) => {
+    return inventory.map(item => {
+      const dayLogs = stockLogs.filter(log => log.itemId === item.id && log.date === dateStr)
+      const added = dayLogs.filter(log => log.type === "in").reduce((sum, log) => sum + log.quantity, 0)
+      const used = dayLogs.filter(log => log.type === "out").reduce((sum, log) => sum + log.quantity, 0)
+      return {
+        ...item,
+        added,
+        used,
+        net: added - used
+      }
+    })
+  }
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) return ""
+    try {
+      const [year, month, day] = dateStr.split("-")
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+      return date.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric"
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  const deleteInventoryItem = (itemId: string) => {
+    const updated = inventory.filter(item => item.id !== itemId)
+    saveInventory(updated)
+    const updatedLogs = stockLogs.filter(log => log.itemId !== itemId)
+    saveLogs(updatedLogs)
+    if (selectedItemId === itemId) {
+      setSelectedItemId(null)
+    }
+  }
+
+  const clearAllStock = () => {
+    if (confirm("Are you sure you want to delete all registered inventory materials and stock logs? This action cannot be undone.")) {
+      saveInventory([])
+      saveLogs([])
+      setSelectedItemId(null)
+    }
+  }
+
   const addExpense = () => {
     const amount = parseFloat(expenseAmount)
     if (!isNaN(amount) && amount > 0 && expenseDescription.trim()) {
@@ -123,18 +388,7 @@ export function ToolsPage() {
     saveExpenses(updated)
   }
 
-  const calculateArea = () => {
-    const length = parseFloat(areaLength)
-    const width = parseFloat(areaWidth)
-    if (!isNaN(length) && !isNaN(width)) {
-      const sqft = length * width
-      const sqm = sqft * 0.0929
-      setAreaResult({
-        sqft: Math.round(sqft * 100) / 100,
-        sqm: Math.round(sqm * 100) / 100
-      })
-    }
-  }
+
 
   const calculateCost = () => {
     const area = parseFloat(costArea)
@@ -221,9 +475,14 @@ export function ToolsPage() {
   const resetTool = () => {
     setExpenseAmount("")
     setExpenseDescription("")
-    setAreaResult(null)
     setCostResult(null)
     setEmiResult(null)
+    setNewItemName("")
+    setNewItemQuantity("")
+    setNewItemThreshold("")
+    setSelectedItemId(null)
+    setAdjustAmount("")
+    setAdjustNotes("")
   }
 
   return (
@@ -418,61 +677,616 @@ export function ToolsPage() {
         </div>
       )}
 
-      {/* Area Calculator */}
-      {activeTool === "area" && (
-        <div className="bg-card border border-border rounded-2xl p-8 space-y-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-card-foreground">Area Calculator</h2>
-            <Button variant="ghost" size="sm" onClick={() => { setActiveTool(null); resetTool(); }}>
-              ← Back
-            </Button>
+      {/* Material Storage Manager */}
+      {activeTool === "storage" && (
+        <div className="bg-card border border-border rounded-2xl p-6 lg:p-8 space-y-6 shadow-sm max-w-4xl mx-auto w-full text-left">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-border pb-4 gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-card-foreground flex items-center gap-2.5">
+                <ClipboardList className="w-6 h-6 text-primary" /> Storage Manager
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Track daily building material stock levels, consumption logs, and low-stock alerts</p>
+            </div>
+            
+            <div className="flex items-center gap-3 shrink-0">
+              {/* Tab Navigation */}
+              <div className="flex bg-muted/40 p-1 rounded-xl border border-border/60">
+                <button
+                  onClick={() => setManagerTab("inventory")}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    managerTab === "inventory"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Current Stock
+                </button>
+                <button
+                  onClick={() => setManagerTab("dailySheets")}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    managerTab === "dailySheets"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Daily Sheets
+                </button>
+              </div>
+
+              <Button variant="ghost" size="sm" onClick={() => { setActiveTool(null); resetTool(); }} className="hover:bg-secondary/80">
+                ← Back
+              </Button>
+            </div>
           </div>
 
-          <div className="space-y-6">
-            <div>
-              <Label htmlFor="length" className="text-base font-medium">Length (ft)</Label>
-              <Input
-                id="length"
-                type="number"
-                placeholder="Enter length"
-                value={areaLength}
-                onChange={(e) => setAreaLength(e.target.value)}
-                className="mt-2 h-14 text-base rounded-xl"
-              />
+          {/* Quick Stock Stats Cards */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-secondary/15 p-4 rounded-xl border border-border flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Total Materials</span>
+              <span className="text-2xl font-black text-card-foreground mt-1">{inventory.length}</span>
             </div>
-            <div>
-              <Label htmlFor="width" className="text-base font-medium">Width (ft)</Label>
-              <Input
-                id="width"
-                type="number"
-                placeholder="Enter width"
-                value={areaWidth}
-                onChange={(e) => setAreaWidth(e.target.value)}
-                className="mt-2 h-14 text-base rounded-xl"
-              />
+            <div className="bg-destructive/5 p-4 rounded-xl border border-destructive/10 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-destructive/80">Low Stock Alerts</span>
+              <span className="text-2xl font-black text-destructive mt-1">
+                {inventory.filter(item => item.quantity <= item.threshold).length}
+              </span>
             </div>
-            <Button onClick={calculateArea} className="w-full h-14 text-base rounded-xl">
-              Calculate
-            </Button>
+            <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-primary/80">Total Activity Logs</span>
+              <span className="text-2xl font-black text-primary mt-1">{stockLogs.length}</span>
+            </div>
           </div>
 
-          {areaResult && (
-            <div className="bg-secondary rounded-xl p-4 space-y-3">
-              <h3 className="font-semibold text-secondary-foreground">Results</h3>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-primary">{areaResult.sqft}</p>
-                  <p className="text-xs text-muted-foreground">Square Feet</p>
+          {/* Tab 1: Current Stock Inventory */}
+          {managerTab === "inventory" && (
+            <div className="space-y-6">
+              
+              {/* Header inside Inventory tab */}
+              <div className="flex justify-between items-center border-b border-border pb-4 gap-4 print:hidden">
+                <div className="space-y-0.5">
+                  <h3 className="text-lg font-bold text-card-foreground">Stock Inventory</h3>
+                  <p className="text-xs text-muted-foreground">Select a material card to adjust stock, or register new items</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-primary">{areaResult.sqm}</p>
-                  <p className="text-xs text-muted-foreground">Square Meters</p>
+                <div className="flex items-center gap-2">
+                  {inventory.length > 0 && (
+                    <button
+                      onClick={clearAllStock}
+                      className="px-4 py-2 text-xs rounded-lg font-bold text-muted-foreground hover:text-destructive hover:bg-destructive/10 border border-border transition-all flex items-center justify-center gap-1.5"
+                    >
+                      Clear All Stock
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowAddForm(!showAddForm)}
+                    className={cn(
+                      "px-4 py-2 text-xs rounded-lg font-bold transition-all border flex items-center justify-center gap-1.5",
+                      showAddForm 
+                        ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20" 
+                        : "bg-primary text-primary-foreground border-primary hover:bg-primary/95 shadow-sm shadow-primary/10"
+                    )}
+                  >
+                    {showAddForm ? "Cancel Add" : "+ Register Material"}
+                  </button>
                 </div>
+              </div>
+
+              {/* Collapsible Register form card */}
+              {showAddForm && (
+                <div className="bg-secondary/15 border border-border p-5 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-3 duration-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-extrabold uppercase tracking-widest text-card-foreground">Add New Material</h3>
+                    <button 
+                      onClick={() => setShowAddForm(false)} 
+                      className="text-muted-foreground hover:text-foreground text-xs font-bold"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Name input */}
+                    <div>
+                      <Label htmlFor="name" className="text-xs font-bold">Material Name</Label>
+                      <Input
+                        id="name"
+                        type="text"
+                        placeholder="e.g. Ultratech OPC Cement"
+                        value={newItemName}
+                        onChange={e => setNewItemName(e.target.value)}
+                        className="h-10 text-xs rounded-lg mt-1 bg-card border-border"
+                      />
+                    </div>
+
+                    {/* Category & Unit */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs font-bold">Category</Label>
+                        <select
+                          value={newItemCategory}
+                          onChange={e => {
+                            setNewItemCategory(e.target.value)
+                            const cat = e.target.value
+                            if (cat === "Cement") setNewItemUnit("Bags")
+                            else if (cat === "Steel / Metal") setNewItemUnit("Kg")
+                            else if (cat === "Sand / Aggregates") setNewItemUnit("Tons")
+                            else if (cat === "Bricks / Blocks") setNewItemUnit("Pieces")
+                            else if (cat === "Paint") setNewItemUnit("Liters")
+                            else setNewItemUnit("Pieces")
+                          }}
+                          className="w-full h-10 px-3 text-xs bg-card border border-border rounded-lg mt-1 font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          {["Cement", "Sand / Aggregates", "Steel / Metal", "Bricks / Blocks", "Plumbing", "Electrical", "Paint", "Other"].map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="unit" className="text-xs font-bold">Unit of Measure</Label>
+                        <Input
+                          id="unit"
+                          type="text"
+                          placeholder="e.g. Bags, Kg, Tons"
+                          value={newItemUnit}
+                          onChange={e => setNewItemUnit(e.target.value)}
+                          className="h-10 text-xs rounded-lg mt-1 bg-card border-border"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Initial stock */}
+                    <div>
+                      <Label htmlFor="qty" className="text-xs font-bold">Initial Stock</Label>
+                      <Input
+                        id="qty"
+                        type="number"
+                        placeholder="e.g. 100"
+                        value={newItemQuantity}
+                        onChange={e => setNewItemQuantity(e.target.value)}
+                        className="h-10 text-xs rounded-lg mt-1 bg-card border-border"
+                      />
+                    </div>
+
+                    {/* Threshold */}
+                    <div>
+                      <Label htmlFor="thresh" className="text-xs font-bold">Alert Threshold</Label>
+                      <Input
+                        id="thresh"
+                        type="number"
+                        placeholder="e.g. 20"
+                        value={newItemThreshold}
+                        onChange={e => setNewItemThreshold(e.target.value)}
+                        className="h-10 text-xs rounded-lg mt-1 bg-card border-border"
+                        title="If current stock levels go below this value, you will get a low-stock alert."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <Button 
+                      className="w-full md:w-44 h-10 rounded-lg text-xs font-bold" 
+                      onClick={() => {
+                        addInventoryItem()
+                        setShowAddForm(false)
+                      }}
+                      disabled={!newItemName.trim() || !newItemQuantity || !newItemThreshold}
+                    >
+                      Register Material
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Cards Grid */}
+              {inventory.length === 0 ? (
+                <div className="text-center py-16 bg-secondary/10 rounded-2xl border border-dashed border-border flex flex-col items-center justify-center p-6">
+                  <Package className="w-12 h-12 text-muted-foreground/60 mb-2" />
+                  <p className="font-semibold text-card-foreground">Inventory is Empty</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">Click Register Material to start tracking stock counts.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto pr-1">
+                  {inventory.map(item => {
+                    const isLow = item.quantity <= item.threshold;
+                    const isCritical = item.quantity === 0;
+                    
+                    const safetyRatio = item.threshold > 0 ? Math.min((item.quantity / item.threshold) * 100, 100) : 100;
+                    
+                    let cardBorder = "border-border/60 hover:border-border"
+                    let badgeColor = "bg-emerald-500/10 text-emerald-600 border-emerald-200"
+                    let badgeText = "In Stock"
+                    let barColor = "bg-emerald-500"
+
+                    if (isCritical) {
+                      cardBorder = "border-destructive bg-destructive/5 hover:border-destructive"
+                      badgeColor = "bg-destructive/10 text-destructive border-destructive/20"
+                      badgeText = "Out of Stock"
+                      barColor = "bg-destructive"
+                    } else if (isLow) {
+                      cardBorder = "border-amber-500/60 bg-amber-500/5 hover:border-amber-500"
+                      badgeColor = "bg-amber-500/10 text-amber-600 border-amber-200"
+                      badgeText = "Low Stock"
+                      barColor = "bg-amber-500"
+                    }
+
+                    const isSelected = selectedItemId === item.id;
+
+                    return (
+                      <div 
+                        key={item.id} 
+                        className={cn(
+                          "bg-card rounded-xl border p-4 transition-all shadow-sm flex flex-col gap-3",
+                          cardBorder,
+                          isSelected ? "col-span-1 md:col-span-2 ring-2 ring-primary border-primary animate-in fade-in zoom-in-95 duration-150" : ""
+                        )}
+                      >
+                        {/* Upper Section */}
+                        <div 
+                          className="flex justify-between items-start cursor-pointer"
+                          onClick={() => {
+                            setSelectedItemId(isSelected ? null : item.id)
+                            setAdjustAmount("")
+                            setAdjustNotes("")
+                            setAdjustDate(getTodayDateString())
+                          }}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-secondary/80 text-muted-foreground uppercase">
+                                {item.category}
+                              </span>
+                              <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase", badgeColor)}>
+                                {badgeText}
+                              </span>
+                            </div>
+                            <h4 className="font-bold text-card-foreground text-base mt-1">{item.name}</h4>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-2xl font-black text-card-foreground">
+                              {item.quantity.toLocaleString()}
+                            </span>
+                            <span className="text-xs font-semibold text-muted-foreground ml-1">{item.unit}</span>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Threshold: {item.threshold} {item.unit}</p>
+                          </div>
+                        </div>
+
+                        {/* Safety Progress Bar */}
+                        <div className="w-full bg-secondary/50 rounded-full h-2 overflow-hidden border border-border/20">
+                          <div className={cn("h-full rounded-full transition-all duration-500", barColor)} style={{ width: `${safetyRatio}%` }} />
+                        </div>
+
+                        {/* Expandable stock adjustment container */}
+                        {isSelected && (
+                          <div className="mt-2 pt-4 border-t border-border/60 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-bold text-card-foreground">Adjust Stock Level</span>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => deleteInventoryItem(item.id)}
+                                title="Delete Item"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                              {/* Quantity input */}
+                              <div className="md:col-span-2">
+                                <Label htmlFor={`qty-${item.id}`} className="text-[10px] font-bold text-muted-foreground uppercase">Amount</Label>
+                                <Input
+                                  id={`qty-${item.id}`}
+                                  type="number"
+                                  placeholder="e.g. 50"
+                                  value={adjustAmount}
+                                  onChange={(e) => setAdjustAmount(e.target.value)}
+                                  className="h-9 mt-1 text-xs rounded-lg bg-card"
+                                />
+                              </div>
+
+                              {/* Action selector */}
+                              <div className="md:col-span-3 flex gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setAdjustType("in")}
+                                  className={cn(
+                                    "flex-1 h-9 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1",
+                                    adjustType === "in"
+                                      ? "bg-emerald-500 border-emerald-500 text-white shadow-sm"
+                                      : "border-border text-muted-foreground bg-card hover:bg-secondary/40"
+                                  )}
+                                >
+                                  <Plus className="w-3.5 h-3.5" /> Add
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAdjustType("out")}
+                                  className={cn(
+                                    "flex-1 h-9 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1",
+                                    adjustType === "out"
+                                      ? "bg-rose-500 border-rose-500 text-white shadow-sm"
+                                      : "border-border text-muted-foreground bg-card hover:bg-secondary/40"
+                                  )}
+                                >
+                                  <TrendingDown className="w-3.5 h-3.5" /> Use
+                                </button>
+                              </div>
+
+                              {/* Date Selector */}
+                              <div className="md:col-span-3">
+                                <Label htmlFor={`date-${item.id}`} className="text-[10px] font-bold text-muted-foreground uppercase">Date Logged</Label>
+                                <Input
+                                  id={`date-${item.id}`}
+                                  type="date"
+                                  value={adjustDate}
+                                  onChange={(e) => setAdjustDate(e.target.value)}
+                                  className="h-9 mt-1 text-xs rounded-lg bg-card"
+                                />
+                              </div>
+
+                              {/* Notes */}
+                              <div className="md:col-span-2">
+                                <Label htmlFor={`notes-${item.id}`} className="text-[10px] font-bold text-muted-foreground uppercase">Notes</Label>
+                                <Input
+                                  id={`notes-${item.id}`}
+                                  type="text"
+                                  placeholder="e.g. Wall work"
+                                  value={adjustNotes}
+                                  onChange={(e) => setAdjustNotes(e.target.value)}
+                                  className="h-9 mt-1 text-xs rounded-lg bg-card"
+                                />
+                              </div>
+
+                              {/* Submit button */}
+                              <div className="md:col-span-2">
+                                <Button 
+                                  size="sm" 
+                                  className="w-full h-9 rounded-lg text-xs font-bold"
+                                  onClick={() => {
+                                    adjustStock(item.id, adjustAmount, adjustType, adjustNotes, adjustDate)
+                                    setAdjustAmount("")
+                                    setAdjustNotes("")
+                                    setAdjustDate(getTodayDateString())
+                                    setSelectedItemId(null)
+                                  }}
+                                >
+                                  Confirm
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 2: Daily Material Sheets (Daily Reports) */}
+          {managerTab === "dailySheets" && (
+            <div className="space-y-6">
+              
+              {/* Sheet Control Banner */}
+              <div className="bg-secondary/20 p-5 rounded-2xl border border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                    <ClipboardList className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-card-foreground">Select Daily Log Date</h3>
+                    <p className="text-xs text-muted-foreground">Review total structural adjustments and material usage for any day</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 print:hidden">
+                  <Input
+                    type="date"
+                    value={selectedDailySheetDate}
+                    onChange={(e) => {
+                      setSelectedDailySheetDate(e.target.value)
+                      setIsEditingDailySheet(false)
+                    }}
+                    className="h-10 text-xs rounded-lg bg-card w-40"
+                  />
+                  
+                  <button
+                    onClick={() => {
+                      setIsEditingDailySheet(!isEditingDailySheet)
+                      setDailyInflowInput({})
+                      setDailyOutflowInput({})
+                      setDailyNotesInput({})
+                    }}
+                    className={cn(
+                      "h-10 px-4 text-xs rounded-lg font-bold transition-all border flex items-center justify-center gap-1.5",
+                      isEditingDailySheet 
+                        ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20" 
+                        : "bg-secondary text-secondary-foreground border-border hover:bg-secondary/85"
+                    )}
+                  >
+                    {isEditingDailySheet ? "Cancel Edits" : "Edit Daily Sheet"}
+                  </button>
+
+                  <Button
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        window.print()
+                      }
+                    }}
+                    className="h-10 text-xs rounded-lg font-bold bg-primary text-primary-foreground flex items-center gap-2"
+                  >
+                    Print Daily Report
+                  </Button>
+                </div>
+              </div>
+
+              {/* Daily Log Sheet Report */}
+              <div className="bg-card border border-border rounded-2xl p-6 space-y-6 shadow-sm relative overflow-hidden print:p-0 print:border-none print:shadow-none">
+                
+                {/* Print Banner Branding */}
+                <div className="flex justify-between items-center border-b border-border pb-4">
+                  <div className="space-y-1">
+                    <span className="text-[9px] text-primary uppercase tracking-widest font-black">Building Dreams Platform</span>
+                    <h3 className="text-xl font-black text-card-foreground">Daily Construction Material Sheet</h3>
+                    <p className="text-xs text-muted-foreground">Logged changes for date: <span className="font-extrabold text-foreground">{formatDisplayDate(selectedDailySheetDate)}</span></p>
+                  </div>
+
+                </div>
+
+                {/* Daily Overview metrics */}
+                {(() => {
+                  const daySummary = getDailySummary(selectedDailySheetDate)
+                  const totalItemsUsed = daySummary.filter(item => item.used > 0).length
+                  const totalItemsAdded = daySummary.filter(item => item.added > 0).length
+                  
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-2 border-b border-border/40 pb-4">
+                      <div>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block">Items Consumed</span>
+                        <span className="text-lg font-extrabold text-card-foreground">{totalItemsUsed} items</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block">Inflow Shipments</span>
+                        <span className="text-lg font-extrabold text-card-foreground">{totalItemsAdded} items</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block">Active Log Records</span>
+                        <span className="text-lg font-extrabold text-card-foreground">
+                          {stockLogs.filter(log => log.date === selectedDailySheetDate).length} entries
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block">Log Submitter</span>
+                        <span className="text-lg font-extrabold text-card-foreground">Site Supervisor</span>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Materials Sheet Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-border/80 text-[10px] font-black uppercase text-muted-foreground tracking-wider bg-secondary/30">
+                        <th className="py-3 px-4 rounded-l-lg">Material</th>
+                        <th className="py-3 px-4">Category</th>
+                        <th className={cn("py-3 px-4", isEditingDailySheet ? "text-center w-32" : "text-right")}>Inflow (Added)</th>
+                        <th className={cn("py-3 px-4", isEditingDailySheet ? "text-center w-32" : "text-right")}>Outflow (Used)</th>
+                        <th className="py-3 px-4 text-right">Net Change</th>
+                        <th className="py-3 px-4 rounded-r-lg">Unit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {(() => {
+                        const summary = getDailySummary(selectedDailySheetDate)
+                        
+                        if (summary.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
+                                No registered materials found in inventory. Add items in Current Stock tab.
+                              </td>
+                            </tr>
+                          )
+                        }
+
+                        return summary.map(item => {
+                          const netVal = isEditingDailySheet
+                            ? (parseFloat(dailyInflowInput[item.id] || "0") || 0) - (parseFloat(dailyOutflowInput[item.id] || "0") || 0)
+                            : item.net
+                          const netText = netVal > 0 ? `+${netVal.toLocaleString()}` : netVal === 0 ? "0" : `${netVal.toLocaleString()}`
+                          const netColor = netVal > 0 ? "text-emerald-600" : netVal === 0 ? "text-muted-foreground/60" : "text-rose-600"
+                          
+                          return (
+                            <tr key={item.id} className="hover:bg-secondary/10 transition-colors text-xs text-card-foreground font-semibold">
+                              <td className="py-3 px-4 font-bold">{item.name}</td>
+                              <td className="py-3 px-4 text-[10px] font-normal text-muted-foreground uppercase">{item.category}</td>
+                              
+                              {/* Inflow Cell */}
+                              <td className={cn("py-2 px-4", isEditingDailySheet ? "text-center" : "text-right")}>
+                                {isEditingDailySheet ? (
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    className="w-24 text-right h-8 text-xs bg-card border-border/80 inline-block font-semibold focus-visible:ring-primary"
+                                    value={dailyInflowInput[item.id] || ""}
+                                    onChange={e => setDailyInflowInput(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                  />
+                                ) : (
+                                  item.added > 0 ? `+${item.added.toLocaleString()}` : "—"
+                                )}
+                              </td>
+
+                              {/* Outflow Cell */}
+                              <td className={cn("py-2 px-4", isEditingDailySheet ? "text-center" : "text-right")}>
+                                {isEditingDailySheet ? (
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    className="w-24 text-right h-8 text-xs bg-card border-border/80 inline-block font-semibold focus-visible:ring-primary"
+                                    value={dailyOutflowInput[item.id] || ""}
+                                    onChange={e => setDailyOutflowInput(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                  />
+                                ) : (
+                                  item.used > 0 ? `-${item.used.toLocaleString()}` : "—"
+                                )}
+                              </td>
+
+                              {/* Net Change Cell */}
+                              <td className={cn("py-3 px-4 text-right font-bold", netColor)}>
+                                {netText}
+                              </td>
+
+                              <td className="py-3 px-4 text-muted-foreground text-[10px]">{item.unit}</td>
+                            </tr>
+                          )
+                        })
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+
+                {isEditingDailySheet && (
+                  <div className="flex justify-end gap-3 mt-4 print:hidden">
+                    <button
+                      onClick={() => {
+                        setIsEditingDailySheet(false)
+                        setDailyInflowInput({})
+                        setDailyOutflowInput({})
+                        setDailyNotesInput({})
+                      }}
+                      className="px-4 py-2 border border-border rounded-lg text-xs font-bold text-muted-foreground hover:bg-secondary/40 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <Button
+                      onClick={() => {
+                        saveDailyLogs()
+                        setIsEditingDailySheet(false)
+                      }}
+                      className="px-4 py-2 rounded-lg text-xs font-bold bg-primary text-primary-foreground transition-all shadow-md"
+                    >
+                      Save Daily Logs
+                    </Button>
+                  </div>
+                )}
+
+
+
               </div>
             </div>
           )}
         </div>
       )}
+
 
       {/* Cost Estimator */}
       {activeTool === "cost" && (
