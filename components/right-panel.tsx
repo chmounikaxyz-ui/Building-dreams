@@ -42,6 +42,7 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
     detectLocation: contextDetectLocation, 
     setUserLocation,
     hireRequests,
+    setHireRequests,
     sellerOrders,
     sellerPreOrders
   } = useApp()
@@ -105,9 +106,15 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
         else timeStr = `${days} days ago`
       } catch {}
     }
+    // Parse JSON notification text to extract human-readable displayText
+    let displayText = n.text
+    try {
+      const parsed = JSON.parse(n.text)
+      if (parsed && parsed.displayText) displayText = parsed.displayText
+    } catch {}
     return {
       id: n.id,
-      text: n.text,
+      text: displayText,
       time: timeStr,
       avatar: n.sender?.avatar || "",
       read: n.read,
@@ -142,6 +149,42 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
       console.error("Failed to delete notification:", err)
     }
   }
+
+  const markRead = async (id: string | number) => {
+    setDbNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      })
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err)
+    }
+  }
+
+  // Sync hire request payloads from database notifications into local state
+  useEffect(() => {
+    if (!dbNotifications.length) return
+    for (const n of dbNotifications) {
+      if (n.type !== "hire_request" && n.type !== "hire_status") continue
+      try {
+        const parsed = JSON.parse(n.text)
+        if (parsed && parsed.payload) {
+          const payload = parsed.payload
+          setHireRequests((prev: any[]) => {
+            const exists = prev.some((r: any) => r.id === payload.id)
+            if (exists) {
+              // Update status if it changed (e.g. Accepted/Rejected)
+              return prev.map((r: any) => r.id === payload.id ? { ...r, ...payload } : r)
+            } else {
+              return [payload, ...prev]
+            }
+          })
+        }
+      } catch {}
+    }
+  }, [dbNotifications, setHireRequests])
 
   const openNotifications = useCallback(() => {
     if (!showNotifications && bellRef.current) {

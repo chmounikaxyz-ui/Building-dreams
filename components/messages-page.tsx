@@ -14,10 +14,10 @@ type CallState = "idle" | "calling" | "incoming" | "connected"
 // Synthetic Audio Manager using Web Audio API to play dial and ring tones without requiring audio files
 class SyntheticAudio {
   private ctx: AudioContext | null = null
-  private osc1: OscillatorNode | null = null
-  private osc2: OscillatorNode | null = null
-  private gain: GainNode | null = null
+  private activeOscillators: OscillatorNode[] = []
+  private activeGains: GainNode[] = []
   private interval: any = null
+  private timeouts: any[] = []
 
   startRinging() {
     this.stop()
@@ -27,35 +27,36 @@ class SyntheticAudio {
       this.ctx = new AudioContextClass()
       
       const playTone = () => {
-        if (!this.ctx) return
+        if (!this.ctx || this.ctx.state === "closed") return
         try {
-          this.osc1 = this.ctx.createOscillator()
-          this.osc2 = this.ctx.createOscillator()
-          this.gain = this.ctx.createGain()
+          const osc1 = this.ctx.createOscillator()
+          const osc2 = this.ctx.createOscillator()
+          const gain = this.ctx.createGain()
           
-          this.osc1.frequency.value = 440
-          this.osc2.frequency.value = 480
+          osc1.frequency.value = 440
+          osc2.frequency.value = 480
           
-          this.gain.gain.setValueAtTime(0, this.ctx.currentTime)
-          this.gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 0.1)
-          this.gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 1.8)
-          this.gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2.0)
+          gain.gain.setValueAtTime(0, this.ctx.currentTime)
+          gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 0.1)
+          gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 1.8)
+          gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2.0)
           
-          this.osc1.connect(this.gain)
-          this.osc2.connect(this.gain)
-          this.gain.connect(this.ctx.destination)
+          osc1.connect(gain)
+          osc2.connect(gain)
+          gain.connect(this.ctx.destination)
           
-          this.osc1.start()
-          this.osc2.start()
+          osc1.start()
+          osc2.start()
           
-          const o1 = this.osc1
-          const o2 = this.osc2
-          setTimeout(() => {
-            try {
-              o1.stop()
-              o2.stop()
-            } catch {}
+          this.activeOscillators.push(osc1, osc2)
+          this.activeGains.push(gain)
+          
+          const tid = setTimeout(() => {
+            try { osc1.stop() } catch {}
+            try { osc2.stop() } catch {}
+            try { gain.disconnect() } catch {}
           }, 2000)
+          this.timeouts.push(tid)
         } catch (e) {
           console.error(e)
         }
@@ -76,35 +77,36 @@ class SyntheticAudio {
       this.ctx = new AudioContextClass()
       
       const playTone = () => {
-        if (!this.ctx) return
+        if (!this.ctx || this.ctx.state === "closed") return
         try {
-          this.osc1 = this.ctx.createOscillator()
-          this.osc2 = this.ctx.createOscillator()
-          this.gain = this.ctx.createGain()
+          const osc1 = this.ctx.createOscillator()
+          const osc2 = this.ctx.createOscillator()
+          const gain = this.ctx.createGain()
           
-          this.osc1.frequency.value = 350
-          this.osc2.frequency.value = 440
+          osc1.frequency.value = 350
+          osc2.frequency.value = 440
           
-          this.gain.gain.setValueAtTime(0, this.ctx.currentTime)
-          this.gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.05)
-          this.gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.95)
-          this.gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.0)
+          gain.gain.setValueAtTime(0, this.ctx.currentTime)
+          gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.05)
+          gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.95)
+          gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.0)
           
-          this.osc1.connect(this.gain)
-          this.osc2.connect(this.gain)
-          this.gain.connect(this.ctx.destination)
+          osc1.connect(gain)
+          osc2.connect(gain)
+          gain.connect(this.ctx.destination)
           
-          this.osc1.start()
-          this.osc2.start()
+          osc1.start()
+          osc2.start()
           
-          const o1 = this.osc1
-          const o2 = this.osc2
-          setTimeout(() => {
-            try {
-              o1.stop()
-              o2.stop()
-            } catch {}
+          this.activeOscillators.push(osc1, osc2)
+          this.activeGains.push(gain)
+          
+          const tid = setTimeout(() => {
+            try { osc1.stop() } catch {}
+            try { osc2.stop() } catch {}
+            try { gain.disconnect() } catch {}
           }, 1000)
+          this.timeouts.push(tid)
         } catch (e) {
           console.error(e)
         }
@@ -122,15 +124,23 @@ class SyntheticAudio {
       clearInterval(this.interval)
       this.interval = null
     }
-    try {
-      this.osc1?.stop()
-      this.osc2?.stop()
-    } catch {}
-    this.osc1 = null
-    this.osc2 = null
-    this.gain = null
+    // Clear all pending timeouts so they don't fire after stop
+    for (const tid of this.timeouts) {
+      clearTimeout(tid)
+    }
+    this.timeouts = []
+    // Stop and disconnect ALL tracked oscillators and gains
+    for (const osc of this.activeOscillators) {
+      try { osc.stop() } catch {}
+      try { osc.disconnect() } catch {}
+    }
+    this.activeOscillators = []
+    for (const gain of this.activeGains) {
+      try { gain.disconnect() } catch {}
+    }
+    this.activeGains = []
     if (this.ctx) {
-      this.ctx.close()
+      try { this.ctx.close() } catch {}
       this.ctx = null
     }
   }

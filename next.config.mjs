@@ -11,11 +11,11 @@ const nextConfig = {
     unoptimized: true,
   },
   allowedDevOrigins: ['192.168.55.102'],
+  serverExternalPackages: ['@prisma/client'],
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
     },
-    serverExternalPackages: ['@prisma/client'],
   },
 }
 

@@ -643,9 +643,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setHireRequests(prev => [newReq, ...prev])
 
-    // Create notification in database
+    // Create notification in database with payload for cross-user sync
     if (req.workerId && req.explorerId) {
-      console.log(`[Notifications Debug] addHireRequest: Posting notification to worker: ${req.workerId} from: ${req.explorerId}`);
+      const displayText = `${req.explorerName} requested to hire you for "${req.workerProfession}"`
+      const notifText = JSON.stringify({ displayText, payload: newReq })
       fetch("/api/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -653,16 +654,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           userId: req.workerId,
           senderId: req.explorerId,
           type: "hire_request",
-          text: `${req.explorerName} requested to hire you for "${req.workerProfession}"`
+          text: notifText
         })
       })
       .then(res => {
-        console.log(`[Notifications Debug] addHireRequest POST status: ${res.status}`);
-        if (!res.ok) res.text().then(t => console.error(`[Notifications Debug] addHireRequest POST error detail: ${t}`));
+        if (!res.ok) res.text().then(t => console.error(`[Notifications] addHireRequest POST error: ${t}`));
       })
-      .catch(err => console.error("[Notifications Debug] addHireRequest POST failed:", err))
-    } else {
-      console.log("[Notifications Debug] addHireRequest: Bypassing notification - missing workerId or explorerId", { workerId: req.workerId, explorerId: req.explorerId });
+      .catch(err => console.error("[Notifications] addHireRequest POST failed:", err))
     }
   }
 
@@ -671,7 +669,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const updated = prev.map(r => r.id === id ? { ...r, status } : r)
       const found = prev.find(r => r.id === id)
       if (found && found.explorerId && found.workerId && (status === "Accepted" || status === "Rejected")) {
-        console.log(`[Notifications Debug] updateHireRequest: Posting accept/reject notification to explorer: ${found.explorerId} from worker: ${found.workerId}`);
+        const displayText = `${found.workerName} ${status.toLowerCase()} your hire request`
+        const notifText = JSON.stringify({ displayText, payload: { ...found, status } })
         fetch("/api/notifications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -679,21 +678,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             userId: found.explorerId,
             senderId: found.workerId,
             type: "hire_status",
-            text: `${found.workerName} ${status.toLowerCase()} your hire request`
+            text: notifText
           })
         })
         .then(res => {
-          console.log(`[Notifications Debug] updateHireRequest POST status: ${res.status}`);
-          if (!res.ok) res.text().then(t => console.error(`[Notifications Debug] updateHireRequest POST error detail: ${t}`));
+          if (!res.ok) res.text().then(t => console.error(`[Notifications] updateHireRequest POST error: ${t}`));
         })
-        .catch(err => console.error("[Notifications Debug] updateHireRequest POST failed:", err))
-      } else {
-        console.log("[Notifications Debug] updateHireRequest: Bypassing notification - missing properties", {
-          foundExists: !!found,
-          explorerId: found?.explorerId,
-          workerId: found?.workerId,
-          status
-        });
+        .catch(err => console.error("[Notifications] updateHireRequest POST failed:", err))
       }
       return updated
     })

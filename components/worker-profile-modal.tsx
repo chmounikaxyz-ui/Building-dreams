@@ -101,6 +101,7 @@ export function WorkerProfileModal({
   const [dailyRate, setDailyRate] = useState("")
   const [hireMessage, setHireMessage] = useState("")
   const [requestSent, setRequestSent] = useState(false)
+  const [submittingRequest, setSubmittingRequest] = useState(false)
   const [selectedPost, setSelectedPost] = useState<any | null>(null)
   const [showCommentInput, setShowCommentInput] = useState(false)
   const [newCommentText, setNewCommentText] = useState("")
@@ -377,7 +378,8 @@ export function WorkerProfileModal({
   }
 
   const handleSendRequest = () => {
-    if (!startDate) return
+    if (!startDate || submittingRequest) return
+    setSubmittingRequest(true)
     addHireRequest({
       workerId: String(worker.id),
       explorerId: String(explorerInfo.id),
@@ -397,6 +399,7 @@ export function WorkerProfileModal({
     setTimeout(() => {
       setRequestSent(false)
       setShowHireForm(false)
+      setSubmittingRequest(false)
       setJobLocation(""); setStartDate("")
     }, 2000)
   }
@@ -696,8 +699,8 @@ export function WorkerProfileModal({
                       <div className="flex gap-2">
                         <Button size="sm" variant="ghost" className="flex-1 rounded-lg text-xs" onClick={() => setShowHireForm(false)}>Cancel</Button>
                         <Button size="sm" className="flex-1 rounded-lg text-xs gap-1.5"
-                          disabled={!startDate} onClick={handleSendRequest}>
-                          <Send className="w-3.5 h-3.5" /> Send Request
+                          disabled={!startDate || submittingRequest} onClick={handleSendRequest}>
+                          <Send className="w-3.5 h-3.5" /> {submittingRequest ? "Sending..." : "Send Request"}
                         </Button>
                       </div>
                     </div>
