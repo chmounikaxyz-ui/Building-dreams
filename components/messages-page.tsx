@@ -341,10 +341,12 @@ export function MessagesPage() {
           const clearedTime = clearedTimeStr ? new Date(clearedTimeStr) : null
 
           // Filter unread messages that are newer than clearedTime
+          // Exclude WebRTC/call signaling messages — they are never visible to the user
           const unreadCount = msgs.filter((m: any) => {
             if (m.senderId === currentUserId) return false
             if (m.status === "read") return false
             if (clearedTime && new Date(m.createdAt) <= clearedTime) return false
+            if (m.text?.startsWith("__CALL_") || m.text?.startsWith("__RTC_")) return false
             return true
           }).length
 
@@ -631,6 +633,8 @@ export function MessagesPage() {
   const acceptCall = async () => {
     const activeId = callIdRef.current
     if (!activeId || !selectedDbConv) return
+    // Stop the ringtone immediately on answer
+    syntheticAudioRef.current?.stop()
     try {
       await initializePeerConnection()
       const pc = peerConnectionRef.current
@@ -697,6 +701,9 @@ export function MessagesPage() {
   }
 
   const cleanupCall = () => {
+    // Stop audio FIRST before state changes so the callState effect doesn't race
+    syntheticAudioRef.current?.stop()
+
     setCallState("idle")
     setCallId(null)
     setCallDuration(0)
@@ -717,7 +724,6 @@ export function MessagesPage() {
       remoteAudioRef.current.srcObject = null
     }
 
-    syntheticAudioRef.current?.stop()
     iceQueueRef.current = []
 
     if (selectedDbConv) {

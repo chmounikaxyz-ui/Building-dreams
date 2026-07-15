@@ -59,11 +59,20 @@ const mockUsers: Record<string, { name: string; profession: string; avatar: stri
   "203": { name: "Gauresh Singh", profession: "Engineer", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face", role: "worker" },
 }
 
+
 async function ensureUserExists(id: string) {
   try {
     const exists = await prisma.user.findUnique({ where: { id } })
     if (!exists) {
-      const mock = mockUsers[id] || { name: `User ${id}`, profession: "Explorer", avatar: "", role: "explorer" }
+      // Only auto-create stubs for known mock user IDs (numeric or in mockUsers map).
+      // Real registered users already have DB records — don't create a broken stub with their ID as their name.
+      const mock = mockUsers[id]
+      if (!mock) {
+        // Not a known mock ID; this is a real user who should already be in the DB.
+        // Skip stub creation to avoid creating "User <cuid>" entries.
+        console.warn(`User ${id} not found in DB and not a mock — skipping stub creation.`)
+        return
+      }
       await prisma.user.create({
         data: {
           id,
@@ -80,6 +89,7 @@ async function ensureUserExists(id: string) {
     console.error(`Error ensuring user ${id} exists:`, err)
   }
 }
+
 
 export async function POST(req: NextRequest) {
   try {

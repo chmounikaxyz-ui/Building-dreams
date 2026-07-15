@@ -45,7 +45,13 @@ async function ensureUserExists(id: string) {
   try {
     const exists = await prisma.user.findUnique({ where: { id } })
     if (!exists) {
-      const mock = mockUsers[id] || { name: `User ${id}`, profession: "Explorer", avatar: "", role: "explorer" }
+      // Only auto-create stubs for known mock user IDs.
+      // Real registered users already have DB records — skip to avoid "User <cuid>" stubs.
+      const mock = mockUsers[id]
+      if (!mock) {
+        console.warn(`User ${id} not found in DB and not a mock — skipping stub creation.`)
+        return
+      }
       await prisma.user.create({
         data: {
           id,
