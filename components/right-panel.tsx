@@ -186,18 +186,24 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
     }
   }, [dbNotifications, setHireRequests])
 
+  const markAllRead = () => {
+    setDbNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    if (currentUserId) {
+      fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId })
+      }).catch(err => console.error("Failed to mark all as read:", err))
+    }
+  }
+
   const openNotifications = useCallback(() => {
     if (!showNotifications && bellRef.current) {
       const rect = bellRef.current.getBoundingClientRect()
       setNotifPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right })
-      
+
       if (currentUserId && notifList.some(n => !n.read)) {
-        setDbNotifications(prev => prev.map(n => ({ ...n, read: true })))
-        fetch("/api/notifications", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: currentUserId })
-        }).catch(err => console.error("Failed to mark all as read:", err))
+        markAllRead()
       }
     }
     setShowNotifications(v => !v)
@@ -340,29 +346,7 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
     setActiveTab?.("messages")
   }
 
-  const markAllRead = () => {
-    setDbNotifications(prev => prev.map(n => ({ ...n, read: true })))
-    if (currentUserId) {
-      fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId })
-      }).catch(err => console.error("Failed to mark all as read:", err))
-    }
-  }
 
-  const markRead = async (id: string | number) => {
-    setDbNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-    try {
-      await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id })
-      })
-    } catch (err) {
-      console.error("Failed to mark notification as read:", err)
-    }
-  }
 
   const detectLocation = async () => {
     setIsDetecting(true)
