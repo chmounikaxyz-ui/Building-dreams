@@ -18,16 +18,18 @@ class SyntheticAudio {
   private activeGains: GainNode[] = []
   private interval: any = null
   private timeouts: any[] = []
+  private stopped = false  // Guard flag — prevents new tones after stop() is called
 
   startRinging() {
     this.stop()
+    this.stopped = false
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
       if (!AudioContextClass) return
       this.ctx = new AudioContextClass()
       
       const playTone = () => {
-        if (!this.ctx || this.ctx.state === "closed") return
+        if (this.stopped || !this.ctx || this.ctx.state === "closed") return
         try {
           const osc1 = this.ctx.createOscillator()
           const osc2 = this.ctx.createOscillator()
@@ -71,13 +73,14 @@ class SyntheticAudio {
 
   startDialing() {
     this.stop()
+    this.stopped = false
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
       if (!AudioContextClass) return
       this.ctx = new AudioContextClass()
       
       const playTone = () => {
-        if (!this.ctx || this.ctx.state === "closed") return
+        if (this.stopped || !this.ctx || this.ctx.state === "closed") return
         try {
           const osc1 = this.ctx.createOscillator()
           const osc2 = this.ctx.createOscillator()
@@ -120,25 +123,41 @@ class SyntheticAudio {
   }
 
   stop() {
+    // Set stopped flag FIRST so any in-flight playTone callbacks bail out immediately
+    this.stopped = true
+
     if (this.interval) {
       clearInterval(this.interval)
       this.interval = null
     }
-    // Clear all pending timeouts so they don't fire after stop
+    // Cancel all pending auto-stop timeouts
     for (const tid of this.timeouts) {
       clearTimeout(tid)
     }
     this.timeouts = []
-    // Stop and disconnect ALL tracked oscillators and gains
+    // Immediately silence all active gains (cancel scheduled ramps and ramp to 0 now)
+    if (this.ctx && this.ctx.state !== "closed") {
+      const now = this.ctx.currentTime
+      for (const gain of this.activeGains) {
+        try {
+          gain.gain.cancelScheduledValues(now)
+          gain.gain.setValueAtTime(0, now)
+        } catch {}
+        try { gain.disconnect() } catch {}
+      }
+    } else {
+      for (const gain of this.activeGains) {
+        try { gain.disconnect() } catch {}
+      }
+    }
+    this.activeGains = []
+    // Stop all oscillators
     for (const osc of this.activeOscillators) {
       try { osc.stop() } catch {}
       try { osc.disconnect() } catch {}
     }
     this.activeOscillators = []
-    for (const gain of this.activeGains) {
-      try { gain.disconnect() } catch {}
-    }
-    this.activeGains = []
+    // Close the context last
     if (this.ctx) {
       try { this.ctx.close() } catch {}
       this.ctx = null
@@ -370,15 +389,26 @@ export function MessagesPage() {
             }
           }
 
+          // Detect and sanitize stub username (e.g. "User cmrmbuuz...") created by ensureUserExists
+          const rawName = otherUser.name || ""
+          const isStubName = rawName.startsWith("User ") && rawName.slice(5) === conv.otherUserId
+          const resolvedName = isStubName ? "Unknown User" : (rawName || "Unknown User")
+
+          // Sanitize lastMessage — don't show raw signaling strings
+          let sanitizedLastMessage = lastMessage
+          if (sanitizedLastMessage?.startsWith("__CALL_") || sanitizedLastMessage?.startsWith("__RTC_")) {
+            sanitizedLastMessage = null
+          }
+
           return {
             id: conv.id,
             userId: conv.userId,
             otherUserId: conv.otherUserId,
-            otherUserName: otherUser.name || "Unknown",
+            otherUserName: resolvedName,
             otherUserAvatar: otherUser.avatar || "",
-            otherUserProfession: otherUser.profession || "User",
-            lastMessage,
-            lastMessageTime,
+            otherUserProfession: isStubName ? "User" : (otherUser.profession || "User"),
+            lastMessage: sanitizedLastMessage,
+            lastMessageTime: sanitizedLastMessage ? lastMessageTime : null,
             unreadCount,
           }
         } catch (err) {
@@ -775,6 +805,7 @@ export function MessagesPage() {
           if (type === "__RTC_OFFER__" && callState === "calling") {
             const sdp = parts[2]
             try {
+              syntheticAudioRef.current?.stop()
               await initializePeerConnection()
               const pc = peerConnectionRef.current
               if (pc) {

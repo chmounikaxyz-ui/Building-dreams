@@ -137,37 +137,42 @@ export async function POST(
       },
     })
 
-    // Store a clean preview (not full base64) as lastMessage
-    const lastMessagePreview = text.startsWith("__FILE__")
-      ? `__FILE__${text.replace("__FILE__", "").split("||").slice(0, 3).join("||")}` // name||ext||size only
-      : text.startsWith("__IMG__")
-      ? "__IMG__photo" // just a marker, no base64
-      : text
+    // Signaling messages should never be stored as lastMessage or generate notifications
+    const isSignaling = text.startsWith("__CALL_") || text.startsWith("__RTC_")
 
-    // Update conversation's last message
-    await prisma.conversation.update({
-      where: { id: conversationId },
-      data: {
-        lastMessage: lastMessagePreview,
-        lastMessageTime: new Date(),
-      },
-    })
+    // Store a clean preview (not full base64) as lastMessage — skip for signaling
+    if (!isSignaling) {
+      const lastMessagePreview = text.startsWith("__FILE__")
+        ? `__FILE__${text.replace("__FILE__", "").split("||").slice(0, 3).join("||")}` // name||ext||size only
+        : text.startsWith("__IMG__")
+        ? "__IMG__photo" // just a marker, no base64
+        : text
 
-    // Create notification for recipient
-    const conv = await prisma.conversation.findUnique({
-      where: { id: conversationId }
-    })
-    if (conv) {
-      const recipientId = conv.userId === senderId ? conv.otherUserId : conv.userId
-      await prisma.notification.create({
+      // Update conversation's last message
+      await prisma.conversation.update({
+        where: { id: conversationId },
         data: {
-          userId: recipientId,
-          senderId: senderId,
-          type: "message",
-          text: `New message from ${message.sender.name}: "${lastMessagePreview.substring(0, 30)}${lastMessagePreview.length > 30 ? "..." : ""}"`,
-          conversationId: conversationId
-        }
+          lastMessage: lastMessagePreview,
+          lastMessageTime: new Date(),
+        },
       })
+
+      // Create notification for recipient only for real messages
+      const conv = await prisma.conversation.findUnique({
+        where: { id: conversationId }
+      })
+      if (conv) {
+        const recipientId = conv.userId === senderId ? conv.otherUserId : conv.userId
+        await prisma.notification.create({
+          data: {
+            userId: recipientId,
+            senderId: senderId,
+            type: "message",
+            text: `New message from ${message.sender.name}: "${lastMessagePreview.substring(0, 30)}${lastMessagePreview.length > 30 ? "..." : ""}"`,
+            conversationId: conversationId
+          }
+        })
+      }
     }
 
     return NextResponse.json(message, { status: 201 })
