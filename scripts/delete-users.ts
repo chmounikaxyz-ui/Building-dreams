@@ -3,14 +3,23 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
-  const result = await prisma.user.deleteMany({
-    where: {
-      role: {
-        in: ['explorer', 'seller']
-      }
-    }
-  })
-  console.log(`Deleted ${result.count} users.`)
+  console.log('Deleting all messages...')
+  await prisma.message.deleteMany()
+  console.log('Deleting all conversations...')
+  await prisma.conversation.deleteMany()
+  console.log('Deleting all comments...')
+  await prisma.comment.deleteMany()
+  console.log('Deleting all saves...')
+  await prisma.save.deleteMany()
+  console.log('Deleting all likes...')
+  await prisma.like.deleteMany()
+  console.log('Deleting all posts...')
+  await prisma.post.deleteMany()
+  console.log('Deleting all follows...')
+  await prisma.follow.deleteMany()
+  console.log('Deleting all users...')
+  const result = await prisma.user.deleteMany()
+  console.log(`Successfully deleted all ${result.count} accounts/users and all related data.`)
 }
 
 main()
