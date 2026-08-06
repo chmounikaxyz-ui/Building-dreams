@@ -536,6 +536,12 @@ export function RightPanel({ setActiveTab }: { setActiveTab?: (tab: string) => v
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{pro.profession}</span><span>•</span>
                     <div className="flex items-center gap-0.5"><Star className="w-3 h-3 fill-primary text-primary" /><span>{pro.rating}</span></div>
+                    {pro.rate && (
+                      <>
+                        <span>•</span>
+                        <span className="text-primary font-semibold">{pro.rate.startsWith("₹") ? pro.rate : `₹${pro.rate}`}/day</span>
+                      </>
+                    )}
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {pro.distance && pro.distance !== "0 m away" && pro.distance !== "0m away" && pro.distance !== "away"

@@ -595,7 +595,7 @@ export function WorkerProfileModal({
           {!isExplorer && (
             <div className="lg:w-72 bg-muted/30 p-6 flex flex-col gap-4">
               {/* Stats */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className={cn("grid gap-3", worker.rate ? "grid-cols-3" : "grid-cols-2")}>
                 <div className="bg-card rounded-xl p-4 text-center border border-border flex flex-col justify-center items-center">
                   {reviewsCount > 0 ? (
                     <>
@@ -622,6 +622,14 @@ export function WorkerProfileModal({
                   </div>
                   <div className="text-[10px] text-muted-foreground tracking-widest uppercase mt-2">Experience</div>
                 </div>
+                {worker.rate && (
+                  <div className="bg-card rounded-xl p-4 text-center border border-border flex flex-col justify-center items-center h-full">
+                    <div className="text-2xl font-bold text-card-foreground truncate max-w-full uppercase">
+                      {worker.rate.startsWith("₹") ? worker.rate : `₹${worker.rate}`}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground tracking-widest uppercase mt-2">Daily Rate</div>
+                  </div>
+                )}
               </div>
 
               {/* Bio */}

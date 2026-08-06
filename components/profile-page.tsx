@@ -485,6 +485,12 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
                 {profile.experience} experience
               </div>
             )}
+            {user?.role === "worker" && profile.expectedRates && (
+              <div className="flex items-center gap-1">
+                <Banknote className="w-4 h-4 text-slate-400" />
+                <span>Daily Rate: {profile.expectedRates.startsWith("₹") ? profile.expectedRates : `₹${profile.expectedRates}`}/day</span>
+              </div>
+            )}
             {user?.role === "seller" && profile.storeName && (
               <div className="flex items-center gap-1">
                 <Store className="w-4 h-4 text-slate-400" />

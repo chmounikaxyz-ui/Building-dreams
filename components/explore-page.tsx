@@ -779,6 +779,11 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
                     )}
                   </div>
                   <div className="text-right">
+                    {pro.rate && (
+                      <span className="text-sm font-bold text-primary">
+                        {pro.rate.startsWith("₹") ? pro.rate : `₹${pro.rate}`}/day
+                      </span>
+                    )}
                   </div>
                 </div>
 
