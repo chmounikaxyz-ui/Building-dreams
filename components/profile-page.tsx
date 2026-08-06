@@ -469,7 +469,7 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
         <div className="py-4 space-y-4 border-b border-border">
           <div>
             <p className="font-semibold text-foreground">
-              {profile.workerType === "crew" ? "Group Leader / Contractor" : profile.profession}
+              {profile.profession}
             </p>
             <p className="text-sm text-muted-foreground mt-1">{profile.bio}</p>
           </div>

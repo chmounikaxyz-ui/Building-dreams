@@ -497,7 +497,7 @@ export function WorkerProfileModal({
                 <div className="flex items-center gap-1.5">
                   <Building className="w-4 h-4" />
                   <span className="uppercase tracking-wide">
-                    {worker.workerType === "crew" ? "Group Leader / Contractor" : worker.profession}
+                    {worker.profession}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5"><MapPin className="w-4 h-4" /><span className="uppercase tracking-wide">{worker.location}</span></div>
