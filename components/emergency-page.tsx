@@ -86,7 +86,19 @@ export function EmergencyPage({ setActiveTab }: { setActiveTab?: (tab: string) =
           const workers = data.filter((u: any) => {
             if (u.role !== "worker") return false
             const prof = (u.profession || "").toLowerCase()
-            return prof.includes("plumb") || prof.includes("electr") || prof.includes("repair") || prof.includes("security") || prof.includes("lock") || prof.includes("other")
+            const matchesService = prof.includes("plumb") || prof.includes("electr") || prof.includes("repair") || prof.includes("security") || prof.includes("lock") || prof.includes("other")
+            if (!matchesService) return false
+            
+            // Verify workerType is emergency
+            if (u.bio) {
+              try {
+                if (u.bio.trim().startsWith("{") && u.bio.trim().endsWith("}")) {
+                  const p = JSON.parse(u.bio)
+                  return p.workerType === "emergency"
+                }
+              } catch {}
+            }
+            return false
           })
           
           const parsed = workers.map((w: any) => {
