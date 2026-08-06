@@ -205,6 +205,8 @@ importers:
         specifier: 5.7.3
         version: 5.7.3
 
+  prisma/generated-client: {}
+
 packages:
 
   '@alloc/quick-lru@5.2.0':

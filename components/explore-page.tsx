@@ -767,11 +767,7 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
                         <BadgeCheck className="w-4 h-4 text-primary fill-primary/20" />
                       )}
                     </div>
-                    {pro.workerType === "crew" && pro.groupName ? (
-                      <p className="text-xs font-semibold text-primary">{pro.groupName}</p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">{pro.profession}</p>
-                    )}
+                    <p className="text-sm text-muted-foreground">{pro.profession}</p>
                   </div>
                   <div className="text-right">
                     {pro.rate && (
