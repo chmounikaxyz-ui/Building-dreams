@@ -732,11 +732,6 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
                 <div className="w-full h-full" />
               )}
               <div className="absolute top-3 right-3 flex gap-1.5 z-10">
-                {pro.workerType === "crew" && (
-                  <span className="bg-primary/15 text-primary text-[10px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                    <Users className="w-3 h-3" /> {pro.crewSize ? `${pro.crewSize} Members` : "Crew"}
-                  </span>
-                )}
                 {pro.available ? (
                   <span className="bg-green-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm">
                     Available
