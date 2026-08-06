@@ -668,15 +668,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setHireRequests(prev => {
       const updated = prev.map(r => r.id === id ? { ...r, status } : r)
       const found = prev.find(r => r.id === id)
-      if (found && found.explorerId && found.workerId && (status === "Accepted" || status === "Rejected")) {
-        const displayText = `${found.workerName} ${status.toLowerCase()} your hire request`
+      if (found && found.explorerId && found.workerId && (status === "Accepted" || status === "Rejected" || status === "Completed")) {
+        const isCompleted = status === "Completed"
+        const displayText = isCompleted
+          ? `${found.explorerName} marked the job as completed`
+          : `${found.workerName} ${status.toLowerCase()} your hire request`
         const notifText = JSON.stringify({ displayText, payload: { ...found, status } })
         fetch("/api/notifications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId: found.explorerId,
-            senderId: found.workerId,
+            userId: isCompleted ? found.workerId : found.explorerId,
+            senderId: isCompleted ? found.explorerId : found.workerId,
             type: "hire_status",
             text: notifText
           })

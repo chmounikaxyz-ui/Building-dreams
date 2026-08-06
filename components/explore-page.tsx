@@ -253,6 +253,8 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
   }, [hireRequests, hiredJobs, professionals, explorerInfo.name])
 
   // Compute real distances and dynamic ratings when user location is available
+  const activeLoc = exploreLocation || userLocation
+
   const professionalsWithDistance = professionals.map(pro => {
     const ratedJobs = hiredJobs.filter(j => (String(j.workerId) === String(pro.id) || j.workerName === pro.name) && j.status === "Completed" && j.ratings)
     const reviewsCount = ratedJobs.length
@@ -265,8 +267,15 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
 
     let distance = "—"
     let _km = Infinity
-    const activeLoc = exploreLocation || userLocation
-    if (activeLoc?.status === "success" || (activeLoc?.lat && activeLoc?.lon)) {
+    if (
+      activeLoc && 
+      activeLoc.lat && 
+      activeLoc.lon && 
+      pro.lat !== null && 
+      pro.lat !== undefined && 
+      pro.lon !== null && 
+      pro.lon !== undefined
+    ) {
       const km = haversineKm(activeLoc.lat, activeLoc.lon, pro.lat, pro.lon)
       distance = formatDistance(km)
       _km = km
@@ -290,12 +299,19 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
   }
 
   const handleCompleteJob = (jobId: string | number) => {
-    setHiredJobs(prev => prev.map(j =>
-      j.id === jobId
-        ? { ...j, status: "Completed" as const, endDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) }
-        : j
-    ))
-    // Note: hire request status stays as "Accepted" — Hire Requests tab only tracks accept/reject
+    setHiredJobs(prev => prev.map(j => {
+      if (j.id === jobId) {
+        if (j.requestId) {
+          updateHireRequest(Number(j.requestId), "Completed")
+        }
+        return {
+          ...j,
+          status: "Completed" as const,
+          endDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+        }
+      }
+      return j
+    }))
   }
 
   const handleRateJob = (jobId: string | number, ratings: import("@/components/worker-profile-modal").CategoryRatings, review: string) => {
@@ -351,7 +367,15 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
     const matchesAvailable = !filterAvailable || pro.available
     const matchesRating = pro.rating >= filterMinRating
     const matchesVerified = !filterVerified || pro.verified
-    const matchesDistance = filterMaxKm === 0 || pro._km <= filterMaxKm
+    const matchesDistance = filterMaxKm === 0 || 
+      (pro._km !== Infinity && !isNaN(pro._km) && pro._km <= filterMaxKm) ||
+      (pro.location && activeLoc?.city && (
+        pro.location.toLowerCase().includes(activeLoc.city.toLowerCase()) ||
+        activeLoc.city.toLowerCase().includes(pro.location.toLowerCase()) ||
+        pro.location.toLowerCase().split(/[\s,]+/).some(word => 
+          word.length > 3 && activeLoc.city.toLowerCase().includes(word)
+        )
+      ))
 
     return matchesSearch && matchesCategory && matchesAvailable && matchesRating && matchesVerified && matchesDistance
   })

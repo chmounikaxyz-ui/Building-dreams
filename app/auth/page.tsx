@@ -183,6 +183,24 @@ export default function AuthPage() {
     }
     // ────────────────────────────────────────────────────────────────
 
+    let resolvedLat = lat
+    let resolvedLon = lon
+
+    if (location && (!lat || !lon)) {
+      try {
+        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`)
+        if (geoRes.ok) {
+          const geoData = await geoRes.json()
+          if (geoData && geoData[0]) {
+            resolvedLat = parseFloat(geoData[0].lat)
+            resolvedLon = parseFloat(geoData[0].lon)
+          }
+        }
+      } catch (err) {
+        console.error("Geocoding failed during signup:", err)
+      }
+    }
+
     try {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
@@ -197,8 +215,8 @@ export default function AuthPage() {
             : role === "seller" ? "Materials Seller" : "Explorer",
           phone,
           location: location || undefined,
-          lat: lat ?? undefined,
-          lon: lon ?? undefined,
+          lat: resolvedLat ?? undefined,
+          lon: resolvedLon ?? undefined,
           upiId: needsPayment ? upiId : undefined,
           bankAccount: needsPayment ? bankAccount : undefined,
           bankIfsc: needsPayment ? bankIfsc : undefined,

@@ -127,9 +127,92 @@ export function SettingsPage({ setActiveTab }: { setActiveTab?: (tab: string) =>
   const [accountForm, setAccountForm] = useState({
     name: storedUser.name || "",
     email: storedUser.email || "",
-    phone: "",
+    phone: storedUser.phone || "",
     bio: "",
   })
+
+  // Load bio dynamically from JSON structure if needed, or raw text
+  useEffect(() => {
+    if (storedUser.bio) {
+      try {
+        if (storedUser.bio.trim().startsWith("{") && storedUser.bio.trim().endsWith("}")) {
+          const parsed = JSON.parse(storedUser.bio)
+          setAccountForm(f => ({
+            ...f,
+            bio: parsed.bio || "",
+          }))
+        } else {
+          setAccountForm(f => ({
+            ...f,
+            bio: storedUser.bio || "",
+          }))
+        }
+      } catch {
+        setAccountForm(f => ({
+          ...f,
+          bio: storedUser.bio || "",
+        }))
+      }
+    }
+  }, [])
+
+  const handleSaveAccount = async () => {
+    try {
+      const stored = localStorage.getItem("auth_user")
+      const currentUser = stored ? JSON.parse(stored) : {}
+      
+      let stringifiedBio = accountForm.bio
+      if (currentUser.role === "worker" || currentUser.role === "seller") {
+        let bioObj: any = {}
+        if (currentUser.bio) {
+          try {
+            if (currentUser.bio.trim().startsWith("{") && currentUser.bio.trim().endsWith("}")) {
+              bioObj = JSON.parse(currentUser.bio)
+            } else {
+              bioObj.bio = currentUser.bio
+            }
+          } catch {
+            bioObj.bio = currentUser.bio
+          }
+        }
+        bioObj.bio = accountForm.bio
+        stringifiedBio = JSON.stringify(bioObj)
+      }
+
+      // Update local storage
+      const updatedUser = {
+        ...currentUser,
+        name: accountForm.name,
+        email: accountForm.email,
+        phone: accountForm.phone,
+        bio: stringifiedBio,
+      }
+      localStorage.setItem("auth_user", JSON.stringify(updatedUser))
+
+      // API Call to update database
+      if (currentUser.id) {
+        await fetch("/api/users", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: currentUser.id,
+            name: accountForm.name,
+            email: accountForm.email,
+            phone: accountForm.phone,
+            bio: stringifiedBio,
+          })
+        })
+      }
+
+      // Trigger auth-change event so other components reload their state
+      window.dispatchEvent(new CustomEvent("auth-change", { detail: { userId: currentUser.id } }))
+      
+      setSavedAccount(true)
+      setTimeout(() => setSavedAccount(false), 2000)
+    } catch (err) {
+      console.error("Failed to save account settings:", err)
+    }
+  }
 
   const [notifications, setNotifications] = useState({
     messages: true,
@@ -253,7 +336,7 @@ export function SettingsPage({ setActiveTab }: { setActiveTab?: (tab: string) =>
               </div>
               <Button
                 className="w-full rounded-xl"
-                onClick={() => { setSavedAccount(true); setTimeout(() => setSavedAccount(false), 2000) }}
+                onClick={handleSaveAccount}
               >
                 {savedAccount ? t.saved : t.saveChanges}
               </Button>

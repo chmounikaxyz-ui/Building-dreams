@@ -614,16 +614,18 @@ export function WorkerProfileModal({
                             if (onCompleteJob) {
                               onCompleteJob(activeJob.id)
                             } else {
-                              const updated = localHiredJobs.map(j =>
-                                j.id === activeJob.id
-                                  ? { ...j, status: "Completed" as const, endDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) }
-                                  : j
-                              )
+                              const updated = localHiredJobs.map(j => {
+                                if (j.id === activeJob.id) {
+                                  if (j.requestId) {
+                                    updateHireRequest(Number(j.requestId), "Completed")
+                                  }
+                                  return { ...j, status: "Completed" as const, endDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) }
+                                }
+                                return j
+                              })
                               setLocalHiredJobs(updated)
                               localStorage.setItem("hired_jobs", JSON.stringify(updated))
                             }
-                            // Note: hireRequest status stays as "Accepted" — Hire Requests tab
-                            // only tracks accept/reject, not job completion.
                           }}>
                           <ClipboardCheck className="w-4 h-4" />
                           Mark Job as Complete

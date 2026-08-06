@@ -792,7 +792,7 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
               <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setIsEditProfileOpen(false)}>Cancel</Button>
               <Button
                 className="flex-1 rounded-xl"
-                onClick={() => {
+                onClick={async () => {
                   const updated = { ...editDraft }
                   
                   // For seller, update profession to contain store name
@@ -830,12 +830,33 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
                   try {
                     const stored = localStorage.getItem("auth_user")
                     const storedUser = stored ? JSON.parse(stored) : {}
+                    
+                    let resolvedLat = storedUser.lat
+                    let resolvedLon = storedUser.lon
+
+                    if (updated.location && updated.location !== storedUser.location) {
+                      try {
+                        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(updated.location)}&format=json&limit=1`)
+                        if (geoRes.ok) {
+                          const geoData = await geoRes.json()
+                          if (geoData && geoData[0]) {
+                            resolvedLat = parseFloat(geoData[0].lat)
+                            resolvedLon = parseFloat(geoData[0].lon)
+                          }
+                        }
+                      } catch (err) {
+                        console.error("Geocoding failed during profile update:", err)
+                      }
+                    }
+
                     const mergedUser = {
                       ...storedUser,
                       name: updated.name,
                       email: updated.email,
                       profession: resolvedProfession,
                       location: updated.location,
+                      lat: resolvedLat,
+                      lon: resolvedLon,
                       bio: stringifiedBio,
                       experience: updated.experience,
                       expectedRates: updated.expectedRates,
@@ -865,6 +886,8 @@ export function ProfilePage({ setActiveTab }: { setActiveTab?: (tab: string) => 
                           email: updated.email,
                           profession: resolvedProfession,
                           location: updated.location,
+                          lat: resolvedLat,
+                          lon: resolvedLon,
                           bio: stringifiedBio,
                           phone: updated.phone,
                           upiId: updated.upiId,
