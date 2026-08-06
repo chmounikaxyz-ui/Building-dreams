@@ -25,6 +25,7 @@ export async function GET(
         bio: true,
         rating: true,
         verified: true,
+        location: true,
         following: {
           select: {
             following: {
