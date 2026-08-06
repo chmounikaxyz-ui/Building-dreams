@@ -28,7 +28,6 @@ Building Dreams is a comprehensive, modern web platform designed to organize and
 
 ### ⭐ 5. Trust & Transparency
 * **Multi-dimensional Rating System:** Rate completed jobs across 5 distinct categories: Functionality, Behavior, Communication, Speed, and Responsiveness.
-* **Verified Badges:** Visual indicators for vetted and trusted professionals.
 * **Direct Payments:** Professionals can list their UPI ID and Bank Details for secure, direct, middleman-free payments.
 
 ---
