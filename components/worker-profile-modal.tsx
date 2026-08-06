@@ -514,55 +514,6 @@ export function WorkerProfileModal({
                 )}
               </div>
 
-              {worker.workerType === "crew" && (
-                <div className="bg-card border border-border rounded-2xl p-5 mb-6 space-y-4 shadow-sm text-left">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                        <Users className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm text-card-foreground">Crew & Team Configuration</h4>
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Led by {worker.name}</p>
-                      </div>
-                    </div>
-                    {worker.crewSize && (
-                      <span className="bg-primary/10 text-primary text-xs px-2.5 py-1 rounded-full font-bold">
-                        {worker.crewSize} Members
-                      </span>
-                    )}
-                  </div>
-
-                  {worker.crewComposition && (
-                    <div className="space-y-2 text-left">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Crew Skills Breakdown</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {worker.crewComposition.split(",").map((member: string, i: number) => {
-                          const cleanMember = member.trim();
-                          if (!cleanMember) return null;
-                          
-                          let icon = "👷";
-                          const lower = cleanMember.toLowerCase();
-                          if (lower.includes("paint")) icon = "🎨";
-                          else if (lower.includes("plumb")) icon = "🔧";
-                          else if (lower.includes("electr") || lower.includes("wire")) icon = "⚡";
-                          else if (lower.includes("carpenter") || lower.includes("wood")) icon = "🪚";
-                          else if (lower.includes("mason") || lower.includes("brick")) icon = "🧱";
-                          else if (lower.includes("tile") || lower.includes("marble")) icon = "📐";
-                          else if (lower.includes("helper") || lower.includes("labor")) icon = "🤝";
-                          
-                          return (
-                            <div key={i} className="flex items-center gap-2.5 bg-secondary/40 px-3.5 py-2 rounded-xl text-xs font-semibold text-card-foreground border border-border/40 justify-start">
-                              <span className="text-base shrink-0">{icon}</span>
-                              <span className="truncate">{cleanMember}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {isExplorer && worker.bio && (
                 <div className="bg-muted/30 border border-border rounded-2xl p-4 mb-4">
