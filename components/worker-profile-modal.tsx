@@ -247,17 +247,16 @@ export function WorkerProfileModal({
     return String(post.user?.id) === String(explorerInfo.id)
   }
 
+  const effectiveHiredJobs = hiredJobs && hiredJobs.length > 0 ? hiredJobs : localHiredJobs
+  const pastJobs = effectiveHiredJobs.filter(j => (String(j.workerId) === String(worker.id) || j.workerName === worker.name) && j.status === "Completed")
+
   // Check existing request status for this worker from this explorer (ignoring completed requests so they can hire again)
   const existingRequest = hireRequests.find(
-    r => r.workerName === worker.name && r.explorerName === explorerInfo.name && r.status !== "Completed"
+    r => r.workerName === worker.name && r.explorerName === explorerInfo.name && r.status !== "Completed" && !pastJobs.some(j => j.requestId === r.id || (j.workerName === r.workerName && j.startDate === r.startDate))
   )
-
-
-  const effectiveHiredJobs = hiredJobs && hiredJobs.length > 0 ? hiredJobs : localHiredJobs
 
   const activeJob = effectiveHiredJobs.find(j => (String(j.workerId) === String(worker.id) || j.workerName === worker.name) && j.status === "Active")
   const isHired = !!activeJob || existingRequest?.status === "Accepted"
-  const pastJobs = effectiveHiredJobs.filter(j => (String(j.workerId) === String(worker.id) || j.workerName === worker.name) && j.status === "Completed")
   const unratedJobs = pastJobs.filter(j => !j.ratings)
 
   const isSeller = worker?.role === "seller" || String(worker?.profession || "").toLowerCase().includes("seller")
@@ -616,8 +615,11 @@ export function WorkerProfileModal({
                             } else {
                               const updated = localHiredJobs.map(j => {
                                 if (j.id === activeJob.id) {
-                                  if (j.requestId) {
-                                    updateHireRequest(Number(j.requestId), "Completed")
+                                  const reqId = j.requestId 
+                                    ? j.requestId 
+                                    : hireRequests.find(r => r.workerName === j.workerName && r.explorerName === explorerInfo.name && r.status === "Accepted")?.id
+                                  if (reqId) {
+                                    updateHireRequest(Number(reqId), "Completed")
                                   }
                                   return { ...j, status: "Completed" as const, endDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) }
                                 }

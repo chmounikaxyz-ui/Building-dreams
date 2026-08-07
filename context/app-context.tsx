@@ -666,8 +666,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateHireRequest = (id: number, status: HireRequest["status"]) => {
     setHireRequests(prev => {
-      const updated = prev.map(r => r.id === id ? { ...r, status } : r)
-      const found = prev.find(r => r.id === id)
+      const updated = prev.map(r => String(r.id) === String(id) ? { ...r, status } : r)
+      const found = prev.find(r => String(r.id) === String(id))
       if (found && found.explorerId && found.workerId && (status === "Accepted" || status === "Rejected" || status === "Completed")) {
         const isCompleted = status === "Completed"
         const displayText = isCompleted

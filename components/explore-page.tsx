@@ -301,8 +301,11 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
   const handleCompleteJob = (jobId: string | number) => {
     setHiredJobs(prev => prev.map(j => {
       if (j.id === jobId) {
-        if (j.requestId) {
-          updateHireRequest(Number(j.requestId), "Completed")
+        const reqId = j.requestId 
+          ? j.requestId 
+          : hireRequests.find(r => r.workerName === j.workerName && r.explorerName === explorerInfo.name && r.status === "Accepted")?.id
+        if (reqId) {
+          updateHireRequest(Number(reqId), "Completed")
         }
         return {
           ...j,

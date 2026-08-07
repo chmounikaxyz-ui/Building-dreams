@@ -7,9 +7,20 @@ __v0_jsx-dev-runtime.ts
 .vercel/
 
 # Environment variables
+.env
 .env*.local
+
+# Logs
+chat-debug.log
+logs
+*.log
+
+# Databases
+prisma/dev.db
+*.db
+*.db-journal
 
 # Common ignores
 node_modules
-.next/
+.next
 .DS_Store

@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing email or password" }, { status: 400 })
     }
 
-    const user = await prisma.user.findUnique({ where: { email } })
+    const cleanEmail = email.trim().toLowerCase()
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } })
 
     if (!user) {
       return NextResponse.json({ error: "No account found with this email" }, { status: 404 })

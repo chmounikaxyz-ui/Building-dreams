@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client"
+import { prisma } from "../lib/db/prisma"
 import { hashPassword } from "../lib/db/auth"
-
-const prisma = new PrismaClient()
 
 async function main() {
   // Clear existing data
@@ -17,7 +15,23 @@ async function main() {
 
   console.log("Creating seed data...")
 
-  // 1. Create Explorer User
+  // 1. Create Explorer User (Ramesh)
+  await prisma.user.create({
+    data: {
+      email: "ramesh@construction.com",
+      password: await hashPassword("password123"),
+      name: "Ramesh Kumar",
+      role: "explorer",
+      profession: "Explorer",
+      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
+      bio: "Home owner looking to build a new house and hire skilled workers.",
+      location: "Mumbai, India",
+      rating: 5.0,
+      verified: true,
+    },
+  })
+
+  // 1b. Create Alternate Explorer User
   await prisma.user.create({
     data: {
       email: "explorer@construction.com",

@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 })
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } })
+    const cleanEmail = email.trim().toLowerCase()
+    const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } })
     if (existingUser) {
       return NextResponse.json({ error: "Email already registered" }, { status: 400 })
     }
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     const user = await prisma.user.create({
       data: {
-        email,
+        email: cleanEmail,
         password: hashedPassword,
         name,
         role,
