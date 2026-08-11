@@ -9,38 +9,92 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 })
     }
 
-    // Fetch conversations where the user is either initiator OR the other party
-    const [asInitiator, asOther] = await Promise.all([
-      prisma.conversation.findMany({
-        where: { userId },
-        orderBy: { lastMessageTime: "desc" },
-      }),
-      prisma.conversation.findMany({
-        where: { otherUserId: userId },
-        orderBy: { lastMessageTime: "desc" },
-      }),
-    ])
-
-    // Merge and deduplicate, flipping perspective for "asOther" so caller always sees otherUserId as the other person
-    const allConversations = [
-      ...asInitiator.map(c => ({ ...c, _perspective: "initiator" })),
-      ...asOther.map(c => ({
-        ...c,
-        // Flip: from seller's perspective, the "other" user is the initiator
-        otherUserId: c.userId,
-        userId: c.otherUserId,
-        _perspective: "other",
-      })),
-    ]
-
-    // Sort by lastMessageTime desc
-    allConversations.sort((a, b) => {
-      if (!a.lastMessageTime) return 1
-      if (!b.lastMessageTime) return -1
-      return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        OR: [
+          { userId },
+          { otherUserId: userId }
+        ]
+      },
+      orderBy: { lastMessageTime: "desc" },
     })
 
-    return NextResponse.json(allConversations)
+    const allConversations = conversations.map(c => {
+      const isInitiator = c.userId === userId
+      return {
+        ...c,
+        // Flip perspective so the caller always sees the OTHER user's id as otherUserId
+        otherUserId: isInitiator ? c.otherUserId : c.userId,
+        userId: isInitiator ? c.userId : c.otherUserId,
+        _perspective: isInitiator ? "initiator" : "other"
+      }
+    })
+
+    const otherUserIds = Array.from(new Set(allConversations.map(c => c.otherUserId)))
+    
+    // Fetch users
+    const users = await prisma.user.findMany({
+      where: { id: { in: otherUserIds } },
+      select: { id: true, name: true, avatar: true, profession: true, role: true }
+    })
+    const userMap = new Map(users.map(u => [u.id, u]))
+
+    const convIds = allConversations.map(c => c.id)
+
+    // Unread counts
+    let unreadCounts: any[] = []
+    if (convIds.length > 0) {
+      unreadCounts = await prisma.message.groupBy({
+        by: ['conversationId'],
+        where: {
+          conversationId: { in: convIds },
+          senderId: { not: userId },
+          status: { not: "read" }
+        },
+        _count: { id: true }
+      } as any)
+    }
+    const unreadMap = new Map(unreadCounts.map(u => [u.conversationId, u._count.id]))
+
+    // Latest message (for call signaling)
+    let recentMessages: any[] = []
+    if (convIds.length > 0) {
+      recentMessages = await prisma.message.findMany({
+        where: {
+          conversationId: { in: convIds },
+          createdAt: { gte: new Date(Date.now() - 5 * 60000) } // last 5 mins
+        },
+        orderBy: { createdAt: 'desc' }
+      })
+    }
+    
+    const latestMsgMap = new Map()
+    for (const m of recentMessages) {
+      if (!latestMsgMap.has(m.conversationId)) {
+        latestMsgMap.set(m.conversationId, m)
+      }
+    }
+
+    const enriched = allConversations.map(c => {
+      const otherUser = userMap.get(c.otherUserId)
+      const unreadCount = unreadMap.get(c.id) || 0
+      const latestMsg = latestMsgMap.get(c.id)
+      
+      return {
+        id: c.id,
+        userId: c.userId,
+        otherUserId: c.otherUserId,
+        otherUserName: otherUser?.name || "Unknown User",
+        otherUserAvatar: otherUser?.avatar || "",
+        otherUserProfession: otherUser?.profession || "User",
+        lastMessage: c.lastMessage,
+        lastMessageTime: c.lastMessageTime,
+        unreadCount,
+        latestMsgObj: latestMsg ? { text: latestMsg.text, senderId: latestMsg.senderId, createdAt: latestMsg.createdAt } : null
+      }
+    })
+
+    return NextResponse.json(enriched)
   } catch (error) {
     console.error("Get conversations error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

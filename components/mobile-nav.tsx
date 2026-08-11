@@ -104,17 +104,10 @@ export function MobileNav({ activeTab, setActiveTab, userRole = "explorer" }: Mo
         if (!res.ok) return
         const convs = await res.json()
         
-        // Count unread messages across all conversations
+        // Count unread messages across all conversations using the new enriched API
         let unreadTotal = 0
         for (const conv of convs) {
-          const msgRes = await fetch(`/api/messages/${conv.id}`)
-          if (msgRes.ok) {
-            const msgs = await msgRes.json()
-            const unreadInConv = msgs.filter((m: any) => 
-              m.senderId !== currentUserId && m.status !== "read"
-            ).length
-            unreadTotal += unreadInConv
-          }
+          unreadTotal += (conv.unreadCount || 0)
         }
         setTotalUnread(unreadTotal)
       } catch (err) {

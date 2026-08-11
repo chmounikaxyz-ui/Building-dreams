@@ -303,30 +303,12 @@ export function MessagesPage() {
         return
       }
       
-      // Enrich conversations with user details
-      const enriched = await Promise.all(data.map(async (conv: any) => {
+      // Enrich conversations with user details (now handled efficiently via API)
+      const enriched = data.map((conv: any) => {
         try {
-          const userRes = await fetch(`/api/users/${conv.otherUserId}`)
-          if (!userRes.ok) {
-            return {
-              id: conv.id,
-              userId: conv.userId,
-              otherUserId: conv.otherUserId,
-              otherUserName: "Unknown User",
-              otherUserAvatar: "",
-              otherUserProfession: "User",
-              lastMessage: conv.lastMessage,
-              lastMessageTime: conv.lastMessageTime,
-              unreadCount: 0,
-            }
-          }
-          const otherUser = await userRes.json()
-          const msgRes = await fetch(`/api/messages/${conv.id}`)
-          const msgs: any[] = msgRes.ok ? await msgRes.json() : []
-
           // Check for incoming call signaling message
-          const lastMsg = msgs[msgs.length - 1]
-          if (lastMsg && lastMsg.text.startsWith("__CALL_INITIATED__") && lastMsg.senderId !== currentUserId) {
+          const lastMsg = conv.latestMsgObj
+          if (lastMsg && lastMsg.text?.startsWith("__CALL_INITIATED__") && lastMsg.senderId !== currentUserId) {
             const parts = lastMsg.text.split("||")
             const msgCallId = parts[1]
             const timestampStr = parts[2]
@@ -343,9 +325,9 @@ export function MessagesPage() {
                 id: conv.id,
                 userId: conv.userId,
                 otherUserId: conv.otherUserId,
-                otherUserName: otherUser.name || "User",
-                otherUserAvatar: otherUser.avatar || "",
-                otherUserProfession: otherUser.profession || "User",
+                otherUserName: conv.otherUserName || "User",
+                otherUserAvatar: conv.otherUserAvatar || "",
+                otherUserProfession: conv.otherUserProfession || "User",
                 lastMessage: conv.lastMessage || null,
                 lastMessageTime: conv.lastMessageTime || null,
                 unreadCount: 0
@@ -359,15 +341,7 @@ export function MessagesPage() {
           const clearedTimeStr = localStorage.getItem(`cleared_${currentUserId}_${conv.id}`)
           const clearedTime = clearedTimeStr ? new Date(clearedTimeStr) : null
 
-          // Filter unread messages that are newer than clearedTime
-          // Exclude WebRTC/call signaling messages — they are never visible to the user
-          const unreadCount = msgs.filter((m: any) => {
-            if (m.senderId === currentUserId) return false
-            if (m.status === "read") return false
-            if (clearedTime && new Date(m.createdAt) <= clearedTime) return false
-            if (m.text?.startsWith("__CALL_") || m.text?.startsWith("__RTC_")) return false
-            return true
-          }).length
+          const unreadCount = conv.unreadCount || 0
 
           // Check if lastMessage is older than clearedTime
           let lastMessage = conv.lastMessage
@@ -390,7 +364,7 @@ export function MessagesPage() {
           }
 
           // Detect and sanitize stub username (e.g. "User cmrmbuuz...") created by ensureUserExists
-          const rawName = otherUser.name || ""
+          const rawName = conv.otherUserName || ""
           const isStubName = rawName.startsWith("User ") && rawName.slice(5) === conv.otherUserId
           const resolvedName = isStubName ? "Unknown User" : (rawName || "Unknown User")
 
@@ -405,8 +379,8 @@ export function MessagesPage() {
             userId: conv.userId,
             otherUserId: conv.otherUserId,
             otherUserName: resolvedName,
-            otherUserAvatar: otherUser.avatar || "",
-            otherUserProfession: isStubName ? "User" : (otherUser.profession || "User"),
+            otherUserAvatar: conv.otherUserAvatar || "",
+            otherUserProfession: isStubName ? "User" : (conv.otherUserProfession || "User"),
             lastMessage: sanitizedLastMessage,
             lastMessageTime: sanitizedLastMessage ? lastMessageTime : null,
             unreadCount,
@@ -415,7 +389,7 @@ export function MessagesPage() {
           console.error(`Error enriching conversation ${conv.id}:`, err)
           return null
         }
-      }))
+      })
       setDbConversations(enriched.filter(Boolean) as DbConversation[])
       setLoadingConversations(false)
     } catch (err) {
