@@ -397,41 +397,14 @@ export function ExplorePage({ setActiveTab, userRole = "explorer" }: { setActive
     const worker = professionals.find(p => p.id === workerId) || selectedProfessional
     if (!worker) { closeProfile(); setActiveTab?.("messages"); return }
 
-    // Create or get conversation in DB
     try {
-      const stored = localStorage.getItem("auth_user")
-      if (stored && worker.id) {
-        const currentUser = JSON.parse(stored)
-        if (currentUser.id) {
-          await fetch("/api/messages", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: currentUser.id, otherUserId: String(worker.id) })
-          })
-        }
+      if (worker.id) {
+        localStorage.setItem("active_chat_other_user_id", String(worker.id))
       }
     } catch (err) {
-      console.error("Failed to create conversation in DB:", err)
+      console.error("Failed to set active chat:", err)
     }
 
-    const existing = conversations.find(c => c.name === worker.name)
-    if (existing) {
-      setSelectedConversation(existing)
-    } else {
-      const newConv = {
-        id: newConvId(),
-        name: worker.name,
-        profession: worker.profession,
-        avatar: worker.avatar,
-        lastMessage: "Start a conversation",
-        timestamp: "Just now",
-        unread: 0,
-        isOnline: true,
-        messages: [],
-      }
-      setConversations(prev => [newConv, ...prev])
-      setSelectedConversation(newConv)
-    }
     closeProfile()
     setActiveTab?.("messages")
   }

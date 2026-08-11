@@ -122,38 +122,11 @@ export function WorkerJobsPage({ setActiveTab }: { setActiveTab?: (tab: string) 
     }
 
     try {
-      const stored = localStorage.getItem("auth_user")
-      if (stored && explorerUserId) {
-        const currentUser = JSON.parse(stored)
-        if (currentUser.id) {
-          await fetch("/api/messages", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: currentUser.id, otherUserId: explorerUserId })
-          })
-        }
+      if (explorerUserId) {
+        localStorage.setItem("active_chat_other_user_id", String(explorerUserId))
       }
     } catch (err) {
-      console.error("Failed to create conversation in DB:", err)
-    }
-
-    const existing = conversations.find(c => c.name === explorerName)
-    if (existing) {
-      setSelectedConversation(existing)
-    } else {
-      const newConv = {
-        id: Date.now(),
-        name: explorerName,
-        profession: explorerProfession,
-        avatar: explorerAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(explorerName)}`,
-        lastMessage: "Start a conversation",
-        timestamp: "Just now",
-        unread: 0,
-        isOnline: true,
-        messages: [],
-      }
-      setConversations(prev => [newConv, ...prev])
-      setSelectedConversation(newConv)
+      console.error("Failed to set active chat:", err)
     }
     setActiveTab?.("messages")
   }

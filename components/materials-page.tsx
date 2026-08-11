@@ -388,21 +388,10 @@ export function MaterialsPage({ setActiveTab }: { setActiveTab?: (tab: string) =
       return // can't message yourself
     }
 
-    console.log('🔵 Creating conversation:', { userId: currentUser.id, otherUserId: resolvedSellerId })
+    console.log('🔵 Set active chat and switching to messages tab:', { userId: currentUser.id, otherUserId: resolvedSellerId })
     try {
-      const res = await fetch("/api/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: String(currentUser.id), otherUserId: resolvedSellerId })
-      })
-      const data = await res.json()
-      console.log('🔵 Conversation response:', data, 'Status:', res.status)
-      if (res.ok) {
-        console.log('🔵 Switching to messages tab')
-        setActiveTab?.("messages")
-      } else {
-        alert(data.error || "Could not start conversation. Please try again.")
-      }
+      localStorage.setItem("active_chat_other_user_id", resolvedSellerId)
+      setActiveTab?.("messages")
     } catch (err) {
       console.error("Contact seller error:", err)
     }
