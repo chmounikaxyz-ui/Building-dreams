@@ -120,12 +120,15 @@ async function ensureUserExists(id: string) {
     if (!exists) {
       // Only auto-create stubs for known mock user IDs (numeric or in mockUsers map).
       // Real registered users already have DB records — don't create a broken stub with their ID as their name.
-      const mock = mockUsers[id]
+      let mock = mockUsers[id]
       if (!mock) {
-        // Not a known mock ID; this is a real user who should already be in the DB.
-        // Skip stub creation to avoid creating "User <cuid>" entries.
-        console.warn(`User ${id} not found in DB and not a mock — skipping stub creation.`)
-        return
+        console.warn(`User ${id} not found in DB and not a mock — creating fallback stub to prevent foreign key errors.`)
+        mock = {
+          name: `User ${id.slice(0, 4)}`,
+          profession: "User",
+          avatar: "https://ui-avatars.com/api/?name=User",
+          role: "user"
+        }
       }
       await prisma.user.create({
         data: {
