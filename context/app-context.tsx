@@ -278,7 +278,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const res = await fetch(`/api/users/${user.id}`)
             if (res.ok) {
               const dbUser = await res.json()
-              if (dbUser.avatar !== user.avatar) {
+              if (dbUser.name?.startsWith("User ") && dbUser.avatar === "https://ui-avatars.com/api/?name=User") {
+                // The DB lost our profile (e.g. reset) and recreated a stub. Restore DB from local auth_user!
+                await fetch("/api/users", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId: user.id,
+                    name: user.name,
+                    avatar: user.avatar,
+                    profession: user.profession,
+                    email: user.email,
+                  })
+                })
+              } else if (dbUser.avatar !== user.avatar) {
                 // Update localStorage to match DB
                 user.avatar = dbUser.avatar || ""
                 localStorage.setItem("auth_user", JSON.stringify(user))
