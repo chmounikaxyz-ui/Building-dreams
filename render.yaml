@@ -3,7 +3,7 @@ services:
     name: building-dreams
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build
+    buildCommand: npm install -g pnpm && pnpm install && pnpm run build
     startCommand: pnpm start
     envVars:
       - key: NODE_VERSION
